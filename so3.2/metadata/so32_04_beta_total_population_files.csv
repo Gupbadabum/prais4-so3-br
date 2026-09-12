@@ -1,0 +1,5 @@
+year,filename,url,http_status,content_length_bytes,accept_ranges,etag,last_modified,method,size_gb
+2000,bra_ppp_2000.tif,https://data.worldpop.org/GIS/Population/Global_2000_2020/2000/BRA/bra_ppp_2000.tif,200,4353412605,bytes,"""1037bcdfd-57b04eec9b433""","Mon, 19 Nov 2018 13:59:59 GMT",HEAD,4.054431435652077
+2001,bra_ppp_2001.tif,https://data.worldpop.org/GIS/Population/Global_2000_2020/2001/BRA/bra_ppp_2001.tif,200,4366171230,bytes,"""1043e7c5e-57b0615bd71ea""","Mon, 19 Nov 2018 15:22:28 GMT",HEAD,4.066313831135631
+2002,bra_ppp_2002.tif,https://data.worldpop.org/GIS/Population/Global_2000_2020/2002/BRA/bra_ppp_2002.tif,200,4366081662,bytes,"""1043d1e7e-57b06c7664147""","Mon, 19 Nov 2018 16:12:08 GMT",HEAD,4.0662304144352674
+2003,bra_ppp_2003.tif,https://data.worldpop.org/GIS/Population/Global_2000_2020/2003/BRA/bra_ppp_2003.tif,200,4369498005,bytes,"""104713f95-57b0770283568""","Mon, 19 Nov 2018 16:59:20 GMT",HEAD,4.069412131793797
