@@ -87,16 +87,25 @@ def download_with_resume(
     expected_size: int | None = None,
     chunk_size: int = 16 * 1024 * 1024,
     timeout: int = 120,
+    max_attempts: int = 8,
+    retry_wait_seconds: int = 30,
 ) -> dict:
     """
     Download one source raster at a time.
 
-    A .part file is used. If the server honors a simple HTTP Range request,
-    an interrupted file is resumed. Otherwise the partial file is discarded
-    and the source is downloaded again from byte zero.
+    Interrupted downloads are retried automatically.
+
+    If the remote server supports HTTP Range (206), an existing .part
+    file is resumed. If the server ignores Range and returns 200, the
+    incomplete file is discarded and the download restarts safely from
+    byte zero.
+
+    This behavior is necessary for WorldPop endpoints that advertise
+    Accept-Ranges but do not actually honor Range requests.
     """
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
+
     partial = destination.with_suffix(
         destination.suffix + ".part"
     )
@@ -113,74 +122,175 @@ def download_with_resume(
     if destination.exists():
         local_size = destination.stat().st_size
 
-        if expected_size is None or local_size == expected_size:
+        if (
+            expected_size is None
+            or local_size == expected_size
+        ):
             return {
                 "path": str(destination),
                 "bytes": local_size,
                 "seconds": 0.0,
                 "resumed": False,
                 "reused": True,
+                "attempts": 0,
             }
 
         destination.unlink()
 
-    existing = partial.stat().st_size if partial.exists() else 0
-    headers = {}
+    total_start = time.perf_counter()
+    last_error = None
 
-    if existing > 0:
-        headers["Range"] = f"bytes={existing}-"
+    for attempt in range(1, max_attempts + 1):
 
-    t0 = time.perf_counter()
+        existing = (
+            partial.stat().st_size
+            if partial.exists()
+            else 0
+        )
 
-    with session.get(
-        url,
-        headers=headers,
-        stream=True,
-        allow_redirects=True,
-        timeout=timeout,
-    ) as response:
+        headers = {}
 
-        if response.status_code >= 400:
-            raise RuntimeError(
-                f"Download failed ({response.status_code}): {url}"
+        if existing > 0:
+            headers["Range"] = f"bytes={existing}-"
+
+        print(
+            f"    download attempt "
+            f"{attempt}/{max_attempts}"
+        )
+
+        if existing > 0:
+            print(
+                f"    partial file detected: "
+                f"{existing / (1024 ** 2):.1f} MB"
             )
 
-        resumed = (
-            existing > 0
-            and response.status_code == 206
-        )
+        try:
 
-        if existing > 0 and not resumed:
-            partial.unlink(missing_ok=True)
-            existing = 0
+            with session.get(
+                url,
+                headers=headers,
+                stream=True,
+                allow_redirects=True,
+                timeout=timeout,
+            ) as response:
 
-        mode = "ab" if resumed else "wb"
+                if response.status_code >= 400:
+                    raise RuntimeError(
+                        f"Download failed "
+                        f"({response.status_code}): {url}"
+                    )
 
-        with open(partial, mode) as file_obj:
-            for chunk in response.iter_content(
-                chunk_size=chunk_size
+                resumed = (
+                    existing > 0
+                    and response.status_code == 206
+                )
+
+                if existing > 0 and not resumed:
+
+                    print(
+                        "    server did not honor "
+                        "HTTP Range; restarting "
+                        "from byte zero"
+                    )
+
+                    partial.unlink(
+                        missing_ok=True
+                    )
+
+                    existing = 0
+
+                mode = (
+                    "ab"
+                    if resumed
+                    else "wb"
+                )
+
+                with open(partial, mode) as file_obj:
+
+                    for chunk in response.iter_content(
+                        chunk_size=chunk_size
+                    ):
+                        if chunk:
+                            file_obj.write(chunk)
+
+            final_size = partial.stat().st_size
+
+            if (
+                expected_size is not None
+                and final_size != expected_size
             ):
-                if chunk:
-                    file_obj.write(chunk)
+                raise RuntimeError(
+                    "Downloaded file size does not "
+                    "match the expected size: "
+                    f"{final_size} != "
+                    f"{expected_size} bytes for {url}"
+                )
 
-    elapsed = time.perf_counter() - t0
-    final_size = partial.stat().st_size
+            os.replace(
+                partial,
+                destination,
+            )
 
-    if expected_size is not None and final_size != expected_size:
-        raise RuntimeError(
-            "Downloaded file size does not match the expected size: "
-            f"{final_size} != {expected_size} bytes for {url}"
-        )
+            elapsed = (
+                time.perf_counter()
+                - total_start
+            )
 
-    os.replace(partial, destination)
+            return {
+                "path": str(destination),
+                "bytes": final_size,
+                "seconds": elapsed,
+                "resumed": resumed,
+                "reused": False,
+                "attempts": attempt,
+            }
 
-    return {
-        "path": str(destination),
-        "bytes": final_size,
-        "seconds": elapsed,
-        "resumed": resumed,
-        "reused": False,
-    }
+        except (
+            requests.exceptions.RequestException,
+            RuntimeError,
+        ) as exc:
+
+            last_error = exc
+
+            downloaded = (
+                partial.stat().st_size
+                if partial.exists()
+                else 0
+            )
+
+            print(
+                f"    download interrupted: "
+                f"{type(exc).__name__}: {exc}"
+            )
+
+            print(
+                f"    partial size: "
+                f"{downloaded / (1024 ** 2):.1f} MB"
+            )
+
+            if attempt >= max_attempts:
+                break
+
+            wait_seconds = min(
+                retry_wait_seconds
+                * (2 ** (attempt - 1)),
+                300,
+            )
+
+            print(
+                f"    retrying in "
+                f"{wait_seconds} seconds..."
+            )
+
+            time.sleep(
+                wait_seconds
+            )
+
+    raise RuntimeError(
+        f"Unable to download {url} after "
+        f"{max_attempts} attempts. "
+        f"Last error: {last_error}"
+    )
 
 
 def _write_first_source(
