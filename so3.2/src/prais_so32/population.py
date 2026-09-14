@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import os
 import re
-import subprocess
 import shutil
+import subprocess
 import time
 from pathlib import Path
 
@@ -98,6 +98,10 @@ def download_with_resume(
     WorldPop advertises HTTP Range support but does not honor
     Range requests reliably. Therefore interrupted downloads
     are not resumed: each failed attempt restarts from byte zero.
+
+    Existing complete files are reused when their size matches the
+    expected Content-Length. Existing files are never deleted
+    automatically when a size mismatch is detected.
     """
 
     destination = Path(destination)
@@ -107,29 +111,60 @@ def download_with_resume(
         destination.suffix + ".part"
     )
 
-    # Arquivo completo já existe: reaproveitar.
+    # Prefer the size recorded in the remote inventory. If unavailable,
+    # use a lightweight HEAD request only to obtain Content-Length.
+    if expected_size is None:
+        session = requests_session()
+        expected_size = _remote_size(
+            session,
+            url,
+            timeout=120,
+        )
+
+    if expected_size is not None:
+        expected_size = int(expected_size)
+
+    # Complete source already exists: validate and reuse it.
     if destination.exists():
         local_size = destination.stat().st_size
 
         if expected_size is None:
-            session = requests_session()
-
-            expected_size = _remote_size(
-                 session,
-                 url,
-                 timeout=120,
+            raise RuntimeError(
+                "Existing source file cannot be validated because "
+                "the expected remote size is unavailable: "
+                f"{destination}. The existing file was preserved."
             )
 
-        # Existe, mas tem tamanho incompatível.
-        destination.unlink()
+        if local_size == expected_size:
+            print(
+                f"    reusing existing file "
+                f"({local_size / (1024 ** 3):.3f} GB)"
+            )
+
+            return {
+                "path": str(destination),
+                "bytes": local_size,
+                "seconds": 0.0,
+                "resumed": False,
+                "reused": True,
+                "attempts": 0,
+                "backend": "existing",
+            }
+
+        raise RuntimeError(
+            "Existing source file has unexpected size: "
+            f"{destination}; local={local_size} bytes; "
+            f"expected={expected_size} bytes. "
+            "The existing file was preserved."
+        )
 
     start = time.perf_counter()
     last_error = None
 
     for attempt in range(1, max_attempts + 1):
 
-        # WorldPop não oferece Range funcional.
-        # Cada tentativa precisa começar do zero.
+        # WorldPop does not provide functional HTTP Range support for
+        # these files, so each Python-controlled attempt starts cleanly.
         partial.unlink(missing_ok=True)
 
         print(
@@ -166,17 +201,18 @@ def download_with_resume(
                     f"{size / (1024 ** 2):.1f} MB"
                 )
 
+            if not partial.exists():
+                raise RuntimeError(
+                    "wget exited successfully but the partial "
+                    f"file was not created: {partial}"
+                )
+
             final_size = partial.stat().st_size
 
-            if (
-                expected_size is not None
-                and final_size != expected_size
-            ):
+            if expected_size is not None and final_size != expected_size:
                 raise RuntimeError(
-                    "Downloaded file size does not "
-                    "match expected size: "
-                    f"{final_size} != "
-                    f"{expected_size}"
+                    "Downloaded file size does not match expected size: "
+                    f"{final_size} != {expected_size}"
                 )
 
             os.replace(
@@ -184,10 +220,7 @@ def download_with_resume(
                 destination,
             )
 
-            elapsed = (
-                time.perf_counter()
-                - start
-            )
+            elapsed = time.perf_counter() - start
 
             return {
                 "path": str(destination),
@@ -721,7 +754,7 @@ def build_sex_population(
 
         print(
             f"[{step:02d}/{len(AGE_CLASSES)}] "
-            f"age={age_class}: downloading "
+            f"age={age_class}: source "
             f"{row['filename']}"
         )
 
@@ -809,6 +842,8 @@ def build_sex_population(
             "download_seconds": download["seconds"],
             "download_resumed": download["resumed"],
             "download_reused": download["reused"],
+            "download_attempts": download["attempts"],
+            "download_backend": download["backend"],
             "merge_seconds": merge_seconds,
             **merge_info,
         })
