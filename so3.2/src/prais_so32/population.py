@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import shutil
 import time
 from pathlib import Path
@@ -85,24 +86,20 @@ def download_with_resume(
     url: str,
     destination: str | Path,
     expected_size: int | None = None,
-    chunk_size: int = 16 * 1024 * 1024,
-    timeout: int = 120,
-    max_attempts: int = 8,
-    retry_wait_seconds: int = 30,
+    max_attempts: int = 4,
+    retry_wait_seconds: int = 60,
 ) -> dict:
     """
-    Download one source raster at a time.
+    Download a WorldPop raster using GNU wget.
 
-    Interrupted downloads are retried automatically.
+    The function keeps the legacy name `download_with_resume`
+    for compatibility with the existing processing pipeline.
 
-    If the remote server supports HTTP Range (206), an existing .part
-    file is resumed. If the server ignores Range and returns 200, the
-    incomplete file is discarded and the download restarts safely from
-    byte zero.
-
-    This behavior is necessary for WorldPop endpoints that advertise
-    Accept-Ranges but do not actually honor Range requests.
+    WorldPop advertises HTTP Range support but does not honor
+    Range requests reliably. Therefore interrupted downloads
+    are not resumed: each failed attempt restarts from byte zero.
     """
+
     destination = Path(destination)
     destination.parent.mkdir(parents=True, exist_ok=True)
 
@@ -110,108 +107,64 @@ def download_with_resume(
         destination.suffix + ".part"
     )
 
-    session = requests_session()
-
-    if expected_size is None:
-        expected_size = _remote_size(
-            session,
-            url,
-            timeout=timeout,
-        )
-
+    # Arquivo completo já existe: reaproveitar.
     if destination.exists():
         local_size = destination.stat().st_size
 
-        if (
-            expected_size is None
-            or local_size == expected_size
-        ):
-            return {
-                "path": str(destination),
-                "bytes": local_size,
-                "seconds": 0.0,
-                "resumed": False,
-                "reused": True,
-                "attempts": 0,
-            }
+        if expected_size is None:
+            session = requests_session()
 
+            expected_size = _remote_size(
+                 session,
+                 url,
+                 timeout=120,
+            )
+
+        # Existe, mas tem tamanho incompatível.
         destination.unlink()
 
-    total_start = time.perf_counter()
+    start = time.perf_counter()
     last_error = None
 
     for attempt in range(1, max_attempts + 1):
 
-        existing = (
-            partial.stat().st_size
-            if partial.exists()
-            else 0
-        )
-
-        headers = {}
-
-        if existing > 0:
-            headers["Range"] = f"bytes={existing}-"
+        # WorldPop não oferece Range funcional.
+        # Cada tentativa precisa começar do zero.
+        partial.unlink(missing_ok=True)
 
         print(
-            f"    download attempt "
+            f"    wget attempt "
             f"{attempt}/{max_attempts}"
         )
 
-        if existing > 0:
-            print(
-                f"    partial file detected: "
-                f"{existing / (1024 ** 2):.1f} MB"
-            )
+        command = [
+            "wget",
+            "--output-document",
+            str(partial),
+            "--timeout=120",
+            "--no-verbose",
+            url,
+        ]
 
         try:
+            result = subprocess.run(
+                command,
+                check=False,
+            )
 
-            with session.get(
-                url,
-                headers=headers,
-                stream=True,
-                allow_redirects=True,
-                timeout=timeout,
-            ) as response:
-
-                if response.status_code >= 400:
-                    raise RuntimeError(
-                        f"Download failed "
-                        f"({response.status_code}): {url}"
-                    )
-
-                resumed = (
-                    existing > 0
-                    and response.status_code == 206
+            if result.returncode != 0:
+                size = (
+                    partial.stat().st_size
+                    if partial.exists()
+                    else 0
                 )
 
-                if existing > 0 and not resumed:
-
-                    print(
-                        "    server did not honor "
-                        "HTTP Range; restarting "
-                        "from byte zero"
-                    )
-
-                    partial.unlink(
-                        missing_ok=True
-                    )
-
-                    existing = 0
-
-                mode = (
-                    "ab"
-                    if resumed
-                    else "wb"
+                raise RuntimeError(
+                    f"wget exited with code "
+                    f"{result.returncode}; "
+                    f"partial size="
+                    f"{size / (1024 ** 2):.1f} MB"
                 )
-
-                with open(partial, mode) as file_obj:
-
-                    for chunk in response.iter_content(
-                        chunk_size=chunk_size
-                    ):
-                        if chunk:
-                            file_obj.write(chunk)
 
             final_size = partial.stat().st_size
 
@@ -221,9 +174,9 @@ def download_with_resume(
             ):
                 raise RuntimeError(
                     "Downloaded file size does not "
-                    "match the expected size: "
+                    "match expected size: "
                     f"{final_size} != "
-                    f"{expected_size} bytes for {url}"
+                    f"{expected_size}"
                 )
 
             os.replace(
@@ -233,62 +186,44 @@ def download_with_resume(
 
             elapsed = (
                 time.perf_counter()
-                - total_start
+                - start
             )
 
             return {
                 "path": str(destination),
                 "bytes": final_size,
                 "seconds": elapsed,
-                "resumed": resumed,
+                "resumed": False,
                 "reused": False,
                 "attempts": attempt,
+                "backend": "wget",
             }
 
-        except (
-            requests.exceptions.RequestException,
-            RuntimeError,
-        ) as exc:
-
+        except Exception as exc:
             last_error = exc
 
-            downloaded = (
-                partial.stat().st_size
-                if partial.exists()
-                else 0
-            )
-
             print(
-                f"    download interrupted: "
-                f"{type(exc).__name__}: {exc}"
-            )
-
-            print(
-                f"    partial size: "
-                f"{downloaded / (1024 ** 2):.1f} MB"
+                f"    wget failed: {exc}"
             )
 
             if attempt >= max_attempts:
                 break
 
-            wait_seconds = min(
+            wait = min(
                 retry_wait_seconds
                 * (2 ** (attempt - 1)),
                 300,
             )
 
             print(
-                f"    retrying in "
-                f"{wait_seconds} seconds..."
+                f"    retrying in {wait} seconds..."
             )
 
-            time.sleep(
-                wait_seconds
-            )
+            time.sleep(wait)
 
     raise RuntimeError(
-        f"Unable to download {url} after "
-        f"{max_attempts} attempts. "
+        f"Unable to download {url} "
+        f"after {max_attempts} attempts. "
         f"Last error: {last_error}"
     )
 
