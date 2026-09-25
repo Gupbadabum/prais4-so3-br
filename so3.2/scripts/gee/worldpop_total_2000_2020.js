@@ -7,13 +7,13 @@
 //   WorldPop/GP/100m/pop
 //
 // Purpose:
-//   Validate and export annual total-population rasters for
-//   Brazil, preserving the native WorldPop grid.
+//   Create one export task per source year, preserving the
+//   native WorldPop grid.
 //
-// Notes:
-//   The year 2000 was used as the initial validation case.
-//   Its grid and national population total were checked before
-//   extending the workflow to 2001-2020.
+// Note:
+//   WorldPop total population is available here for 2000-2020.
+//   For PRAIS analysis years 2021-2023, population source year
+//   2020 is reused according to the adopted methodology.
 // ============================================================
 
 
@@ -218,8 +218,8 @@ for (var year = START_YEAR; year <= END_YEAR; year++) {
     fileNamePrefix:
       'population_total_' + year,
 
-    region:
-      population.geometry(),
+    dimensions:
+      '54172x46814',
 
     crs:
       NATIVE_CRS,
