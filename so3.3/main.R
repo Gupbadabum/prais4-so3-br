@@ -1,129 +1,108 @@
 # ============================================================
 # PRAIS4 - SO3.3
-# Vulnerabilidade a seca - Brasil
-# Arquivo principal de orquestracao
+# VULNERABILIDADE A SECA
+# ORQUESTRADOR PRINCIPAL
+# ============================================================
+#
+# Executar a partir da raiz do repositorio:
+#
+#   prais4-so3-br/
+#
 # ============================================================
 
+
 # ============================================================
-# 0. RAIZ DO MODULO
+# 0. PACOTES
 # ============================================================
 
-resolver_raiz_so33 <- function() {
-  wd <- normalizePath(getwd(), mustWork = TRUE)
-
-  if (basename(wd) == "so3.3") {
-    return(wd)
-  }
-
-  candidato <- file.path(wd, "so3.3")
-  if (dir.exists(candidato)) {
-    return(normalizePath(candidato, mustWork = TRUE))
-  }
-
+if (!requireNamespace("data.table", quietly = TRUE)) {
   stop(
-    "Execute o main.R a partir da raiz do repositorio ou do diretorio so3.3/."
+    "O pacote 'data.table' e necessario para o processamento."
   )
 }
-
-DIR_SO33 <- resolver_raiz_so33()
 
 
 # ============================================================
 # 1. CONFIGURACAO
 # ============================================================
 
-source(file.path(DIR_SO33, "config", "config.R"))
+source(
+  "so3.3/config/config.R"
+)
+
+source(
+  "so3.3/config/config_local.R"
+)
 
 
 # ============================================================
-# 2. FUNCOES
+# 2. FUNCOES DE LEITURA E HARMONIZACAO
 # ============================================================
 
-source(file.path(DIR_SO33, "R", "01_leitura", "adaptar_censo_2022.R"))
-source(file.path(DIR_SO33, "R", "02_indicadores", "social.R"))
-source(file.path(DIR_SO33, "R", "03_diagnostico", "diagnostico_indicadores.R"))
+source(
+  "so3.3/R/01_leitura/adaptar_censo_2022.R"
+)
 
-# Futuras inclusoes:
-# source(file.path(DIR_SO33, "R", "01_leitura", 	"adaptar_censo_2000.R"))
-# source(file.path(DIR_SO33, "R", "01_leitura", 	"adaptar_censo_2010.R"))
-# source(file.path(DIR_SO33, "R", "02_indicadores", "economica.R"))
-# source(file.path(DIR_SO33, "R", "02_indicadores", "infraestrutura.R"))
-# source(file.path(DIR_SO33, "R", "04_tratamento", 	"winsorizacao.R"))
-# source(file.path(DIR_SO33, "R", "04_tratamento", 	"boxcox.R"))
-# source(file.path(DIR_SO33, "R", "05_normalizacao", "normalizacao.R"))
-# source(file.path(DIR_SO33, "R", "06_agregacao", 	"componentes.R"))
-# source(file.path(DIR_SO33, "R", "06_agregacao", 	"dvi.R"))
-# source(file.path(DIR_SO33, "R", "07_exportacao", 	"exportar_resultados.R"))
+source(
+  "so3.3/R/02_indicadores/social.R"
+)
 
+source(
+  "so3.3/R/03_diagnostico/diagnostico_indicadores.R"
+)
 
 # ============================================================
-# 3. CHAMADA DOS DADOS
+# 3. PREPARACAO DAS FONTES
 # ============================================================
 
 # ------------------------------------------------------------
-# 3.1 Censo 2000
-# ------------------------------------------------------------
-# O acesso sera feito via censobr.
-# O adaptador devera devolver a mesma estrutura canonica usada
-# por 2010 e 2022.
-
-# censo_2000 <- adaptar_censo_2000(...)
-
-
-# ------------------------------------------------------------
-# 3.2 Censo 2010
-# ------------------------------------------------------------
-# O acesso sera feito via censobr.
-
-# censo_2010 <- adaptar_censo_2010(...)
-
-
-# ------------------------------------------------------------
-# 3.3 Censo 2022 - acesso controlado
+# Censo Demografico 2022
 # ------------------------------------------------------------
 
-if (is.na(DIR_CENSO_2022) || !dir.exists(DIR_CENSO_2022)) {
-  stop(
-    paste0(
-      "Diretorio do Censo 2022 nao configurado. ",
-      "Crie config/config_local.R a partir do arquivo de exemplo."
-    )
-  )
-}
-
-arquivos_pessoas_2022 <- listar_arquivos_pessoas_2022(DIR_CENSO_2022)
-
+censo_2022 <- preparar_censo_2022()
 
 # ============================================================
-# 4. DIMENSAO SOCIAL
+# 5. DIMENSAO SOCIAL
+# CENSO DEMOGRAFICO 2022
 # ============================================================
 
 # ------------------------------------------------------------
-# 4.1 Social - 2000
+# Processamento nacional
+#
+# Cada UF e:
+#
+#   1. lida;
+#   2. adaptada para a estrutura canonica;
+#   3. transformada em indicadores municipais;
+#   4. reduzida ao resultado agregado.
+#
+# Os microdados das 27 UFs nao permanecem simultaneamente
+# em memoria.
 # ------------------------------------------------------------
-
-# social_2000 <- calcular_social_direto(censo_2000, ano = 2000L)
-
-
-# ------------------------------------------------------------
-# 4.2 Social - 2010
-# ------------------------------------------------------------
-
-# social_2010 <- calcular_social_direto(censo_2010, ano = 2010L)
-
-
-# ------------------------------------------------------------
-# 4.3 Social - 2022
-# ------------------------------------------------------------
-# Os arquivos sao processados UF a UF para evitar manter o
-# microdado nacional completo em memoria.
 
 social_2022 <- data.table::rbindlist(
   lapply(
-    arquivos_pessoas_2022,
+    censo_2022$arquivos,
     function(arq) {
-      dados_padronizados <- adaptar_censo_2022(arq)
-      calcular_social_direto(dados_padronizados, ano = 2022L)
+
+      message(
+        "Processando Social 2022: ",
+        basename(arq)
+      )
+
+      dados_uf <- adaptar_censo_2022(
+        arq
+      )
+
+      resultado_uf <- calcular_social_direto(
+        dados_uf
+      )
+
+      rm(dados_uf)
+
+      return(
+        resultado_uf
+      )
     }
   ),
   use.names = TRUE,
@@ -131,108 +110,157 @@ social_2022 <- data.table::rbindlist(
 )
 
 
-# ============================================================
-# 5. DIMENSAO ECONOMICA
-# ============================================================
+# ------------------------------------------------------------
+# Ordenacao
+# ------------------------------------------------------------
 
-# economica_2000 <- calcular_economica(...)
-# economica_2010 <- calcular_economica(...)
-# economica_2022 <- calcular_economica(...)
-
-
-# ============================================================
-# 6. DIMENSAO INFRAESTRUTURAL
-# ============================================================
-
-# infraestrutura_2000 <- calcular_infraestrutura(...)
-# infraestrutura_2010 <- calcular_infraestrutura(...)
-# infraestrutura_2022 <- calcular_infraestrutura(...)
-
+data.table::setorder(
+  social_2022,
+  indicador,
+  cod_mun,
+  grupo
+)
 
 # ============================================================
-# 7. CONSOLIDACAO DOS INDICADORES BRUTOS
+# DIAGNOSTICO - SOCIAL 2022
 # ============================================================
 
-# Nesta etapa, quando os tres censos estiverem implementados:
+diagnostico_social_2022 <- diagnosticar_indicadores(
+  social_2022,
+  n_extremos = 10L
+)
+
+
+# ------------------------------------------------------------
+# Controle especifico dos indicadores percentuais
+# ------------------------------------------------------------
+
+problemas_intervalo_social_2022 <-
+  verificar_intervalo_indicadores(
+    social_2022,
+    indicadores = c(
+      "SOC01_ALF15",
+      "SOC02_RURAL",
+      "SOC04_POP1564"
+    ),
+    minimo = 0,
+    maximo = 100
+  )
+
+
+# ------------------------------------------------------------
+# Portas de controle
+# ------------------------------------------------------------
+
+if (
+  nrow(
+    diagnostico_social_2022$duplicidades
+  ) > 0L
+) {
+
+  stop(
+    "Foram encontradas duplicidades na base Social 2022."
+  )
+}
+
+
+if (
+  nrow(
+    diagnostico_social_2022$
+      problemas_consistencia_sexo
+  ) > 0L
+) {
+
+  warning(
+    "Foram encontradas inconsistencias entre Total, ",
+    "Masculino e Feminino na base Social 2022."
+  )
+}
+
+
+if (
+  nrow(
+    problemas_intervalo_social_2022
+  ) > 0L
+) {
+
+  warning(
+    "Foram encontrados valores ausentes ou fora de ",
+    "[0,100] nos indicadores sociais percentuais de 2022."
+  )
+}
+
+
+# ============================================================
+# 6. DIMENSAO ECONOMICA
+# ============================================================
 #
-# social_bruto <- data.table::rbindlist(
-#   list(
-#     social_2000,
-#     social_2010,
-#     social_2022
-#   ),
-#   use.names = TRUE,
-#   fill = TRUE
-# )
+# Ainda nao implementado.
+# ============================================================
+
+
+# ============================================================
+# 7. DIMENSAO INFRAESTRUTURAL
+# ============================================================
 #
-# indicadores_brutos <- data.table::rbindlist(
-#   list(
-#     social_bruto,
-#     economica_bruto,
-#     infraestrutura_bruto
-#   ),
-#   use.names = TRUE,
-#   fill = TRUE
-# )
+# Ainda nao implementado.
+# ============================================================
 
 
 # ============================================================
-# 8. CONTROLE DE QUALIDADE E DIAGNOSTICO
+# 8. CONSOLIDACAO DOS INDICADORES
 # ============================================================
-
-# Enquanto apenas 2022 esta implementado, o diagnostico e feito
-# sobre social_2022. Quando 2000 e 2010 entrarem, o mesmo fluxo
-# sera aplicado sobre social_bruto / indicadores_brutos.
-
-diagnostico_social_2022 	<- diagnosticar_indicadores(social_2022)
-diagnostico_amostra_2022 	<- diagnosticar_amostra(social_2022)
-consistencia_sexo_2022 		<- verificar_consistencia_sexo(social_2022)
-extremos_social_2022 		<- extrair_extremos(social_2022, n = 10L)
-
-print(diagnostico_social_2022)
-print(diagnostico_amostra_2022)
-print(consistencia_sexo_2022$resumo)
-
-
-# ============================================================
-# 9. TRATAMENTO ESTATISTICO
-# ============================================================
-# O tratamento sera executado somente apos a consolidacao dos
-# recortes 2000, 2010 e 2022.
 #
-# Regra metodologica ja definida:
-#   - anos combinados dentro de cada indicador;
-#   - Total, Masculino e Feminino tratados separadamente.
-
-# indicadores_winsor <- aplicar_winsorizacao(indicadores_brutos, ...)
-# indicadores_boxcox <- aplicar_boxcox(indicadores_winsor, ...)
+# Ainda nao implementado.
+# ============================================================
 
 
 # ============================================================
-# 10. ORIENTACAO E NORMALIZACAO
+# 9. DIAGNOSTICO
 # ============================================================
-
-# indicadores_normalizados <- normalizar_indicadores(...)
-
-
+#
+# Ainda nao implementado.
 # ============================================================
-# 11. COMPONENTES DAS DIMENSOES
-# ============================================================
-
-# componentes <- calcular_componentes(indicadores_normalizados)
 
 
 # ============================================================
-# 12. DVI
+# 10. TRATAMENTO ESTATISTICO
+# ============================================================
+#
+# Winsorizacao
+# Box-Cox
+#
+# Ainda nao implementado.
 # ============================================================
 
-# dvi <- calcular_dvi(componentes)
+
+# ============================================================
+# 11. NORMALIZACAO
+# ============================================================
+#
+# Ainda nao implementado.
+# ============================================================
 
 
 # ============================================================
-# 13. EXPORTACAO
+# 12. COMPONENTES DAS DIMENSOES
 # ============================================================
-# Nenhum microdado individual deve ser exportado ou versionado.
-# Apenas resultados municipais agregados e produtos derivados.
+#
+# Ainda nao implementado.
+# ============================================================
 
-# exportar_resultados(...)
+
+# ============================================================
+# 13. DVI
+# ============================================================
+#
+# Ainda nao implementado.
+# ============================================================
+
+
+# ============================================================
+# 14. EXPORTACAO
+# ============================================================
+#
+# Ainda nao implementado.
+# ============================================================

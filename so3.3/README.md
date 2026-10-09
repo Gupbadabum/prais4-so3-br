@@ -80,13 +80,13 @@ componentes das dimensões
 DVI
 ```
 
-O arquivo `MAIN.R` atua como **orquestrador** do fluxo. A lógica detalhada permanece em arquivos específicos dentro de `R/`.
+O arquivo `main.R` atua como **orquestrador** do fluxo. A lógica detalhada permanece em arquivos específicos dentro de `R/`.
 
 ## Estrutura inicial
 
 ```text
 so3.3/
-├── MAIN.R
+├── main.R
 ├── README.md
 ├── config/
 │   ├── config.R
