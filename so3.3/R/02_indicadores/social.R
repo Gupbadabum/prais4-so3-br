@@ -785,3 +785,90 @@ preparar_insumos_soc03_ev0 <- function(dt) {
     resultado[]
   )
 }
+
+
+# ============================================================
+# PROCESSAMENTO SOCIAL DE UM CENSO
+# ============================================================
+
+processar_social_censo <- function(
+    arquivos,
+    adaptar_fun
+) {
+
+  resultados <- lapply(
+    arquivos,
+    function(arq) {
+
+      message(
+        "Processando Social: ",
+        basename(arq)
+      )
+
+      dados <- adaptar_fun(
+        arq
+      )
+
+      direto <- calcular_social_direto(
+        dados
+      )
+
+      ev0 <- preparar_insumos_soc03_ev0(
+        dados
+      )
+
+      rm(dados)
+
+      list(
+        direto = direto,
+        ev0 = ev0
+      )
+    }
+  )
+
+
+  social_direto <- data.table::rbindlist(
+    lapply(
+      resultados,
+      `[[`,
+      "direto"
+    ),
+    use.names = TRUE,
+    fill = TRUE
+  )
+
+
+  insumos_ev0 <- data.table::rbindlist(
+    lapply(
+      resultados,
+      `[[`,
+      "ev0"
+    ),
+    use.names = TRUE,
+    fill = TRUE
+  )
+
+
+  data.table::setorder(
+    social_direto,
+    indicador,
+    cod_mun,
+    grupo
+  )
+
+  data.table::setorder(
+    insumos_ev0,
+    ano,
+    cod_mun,
+    grupo,
+    idade_mae
+  )
+
+
+  return(
+    list(
+      direto = social_direto,
+      ev0 = insumos_ev0
+    )
+  )
+}

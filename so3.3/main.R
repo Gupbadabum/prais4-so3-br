@@ -80,46 +80,18 @@ censo_2022 <- preparar_censo_2022()
 # em memoria.
 # ------------------------------------------------------------
 
-social_2022 <- data.table::rbindlist(
-  lapply(
-    censo_2022$arquivos,
-    function(arq) {
+# ============================================================
+# SOCIAL - CENSO 2022
+# ============================================================
 
-      message(
-        "Processando Social 2022: ",
-        basename(arq)
-      )
-
-      dados_uf <- adaptar_censo_2022(
-        arq
-      )
-
-      resultado_uf <- calcular_social_direto(
-        dados_uf
-      )
-
-      rm(dados_uf)
-
-      return(
-        resultado_uf
-      )
-    }
-  ),
-  use.names = TRUE,
-  fill = TRUE
+processamento_social_2022 <- processar_social_censo(
+  arquivos = censo_2022$arquivos,
+  adaptar_fun = adaptar_censo_2022
 )
 
+social_2022 		<- processamento_social_2022$direto
 
-# ------------------------------------------------------------
-# Ordenacao
-# ------------------------------------------------------------
-
-data.table::setorder(
-  social_2022,
-  indicador,
-  cod_mun,
-  grupo
-)
+insumos_ev0_2022 	<- processamento_social_2022$ev0
 
 # ============================================================
 # DIAGNOSTICO - SOCIAL 2022
