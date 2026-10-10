@@ -21,6 +21,11 @@ if (!requireNamespace("data.table", quietly = TRUE)) {
   )
 }
 
+if (!requireNamespace("readxl", quietly = TRUE)) {
+  stop(
+    "O pacote 'readxl' e necessario para o processamento."
+  )
+}
 
 # ============================================================
 # 1. CONFIGURACAO
@@ -51,6 +56,14 @@ source(
   "so3.3/R/03_diagnostico/diagnostico_indicadores.R"
 )
 
+source(
+  "so3.3/R/02_indicadores/expectativa_vida_indireta.R"
+)
+
+source(
+  "so3.3/R/01_leitura/ler_tabuas_mortalidade_ibge.R"
+)
+
 # ============================================================
 # 3. PREPARACAO DAS FONTES
 # ============================================================
@@ -60,6 +73,14 @@ source(
 # ------------------------------------------------------------
 
 censo_2022 <- preparar_censo_2022()
+
+# ------------------------------------------------------------
+# Tabuas de mortalidade - IBGE
+# Projecoes da Populacao, Revisao 2024
+# ------------------------------------------------------------
+
+tabuas_mortalidade_ibge <-
+  ler_tabuas_mortalidade_ibge()
 
 # ============================================================
 # 5. DIMENSAO SOCIAL
@@ -92,6 +113,10 @@ processamento_social_2022 <- processar_social_censo(
 social_2022 		<- processamento_social_2022$direto
 
 insumos_ev0_2022 	<- processamento_social_2022$ev0
+
+mortalidade_trussell_2022 <- estimar_mortalidade_trussell(
+  insumos_ev0_2022
+)
 
 # ============================================================
 # DIAGNOSTICO - SOCIAL 2022

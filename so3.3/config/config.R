@@ -66,6 +66,41 @@ DIR_DOCS <- file.path(
   "docs"
 )
 
+# ------------------------------------------------------------
+# Insumos versionados
+#
+# Diferentemente de so3.3/data/, estes arquivos fazem parte
+# do repositorio por serem fontes de referencia necessarias
+# para a reproducao metodologica.
+# ------------------------------------------------------------
+
+DIR_INPUTS <- file.path(
+  DIR_SO33,
+  "inputs"
+)
+
+DIR_REFERENCIAS <- file.path(
+  DIR_INPUTS,
+  "referencias"
+)
+
+DIR_REFERENCIAS_IBGE <- file.path(
+  DIR_REFERENCIAS,
+  "ibge"
+)
+
+
+# ------------------------------------------------------------
+# Tabelas de mortalidade - IBGE
+# Projecoes da Populacao, Revisao 2024
+# Brasil, Grandes Regioes e UFs - 2000/2070
+# ------------------------------------------------------------
+
+ARQ_TABUAS_MORTALIDADE_IBGE <- file.path(
+  DIR_REFERENCIAS_IBGE,
+  "projecoes_2024_tab5_tabuas_mortalidade.xlsx"
+)
+
 
 # ------------------------------------------------------------
 # Subdiretorios de resultados
