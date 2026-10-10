@@ -64,6 +64,10 @@ source(
   "so3.3/R/01_leitura/ler_tabuas_mortalidade_ibge.R"
 )
 
+source(
+  "so3.3/R/01_leitura/ler_coale_demeny_west.R"
+)
+
 # ============================================================
 # 3. PREPARACAO DAS FONTES
 # ============================================================
@@ -81,6 +85,14 @@ censo_2022 <- preparar_censo_2022()
 
 tabuas_mortalidade_ibge <-
   ler_tabuas_mortalidade_ibge()
+  
+# ------------------------------------------------------------
+# Tabuas-modelo Coale-Demeny
+# Familia West
+# ------------------------------------------------------------
+
+coale_demeny_west <-
+  ler_coale_demeny_west()
 
 # ============================================================
 # 5. DIMENSAO SOCIAL

@@ -89,7 +89,6 @@ DIR_REFERENCIAS_IBGE <- file.path(
   "ibge"
 )
 
-
 # ------------------------------------------------------------
 # Tabelas de mortalidade - IBGE
 # Projecoes da Populacao, Revisao 2024
@@ -101,6 +100,17 @@ ARQ_TABUAS_MORTALIDADE_IBGE <- file.path(
   "projecoes_2024_tab5_tabuas_mortalidade.xlsx"
 )
 
+# ------------------------------------------------------------
+# Tabuas-modelo Coale-Demeny - familia West
+#
+# Referencia utilizada para harmonizar q2, q3 e q5
+# estimados pelo metodo Brass-Trussell.
+# ------------------------------------------------------------
+
+ARQ_COALE_DEMENY_WEST <- file.path(
+  DIR_REFERENCIAS_COALE_DEMENY,
+  "coale_demeny_west_qx.csv"
+)
 
 # ------------------------------------------------------------
 # Subdiretorios de resultados
