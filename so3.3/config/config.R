@@ -89,6 +89,11 @@ DIR_REFERENCIAS_IBGE <- file.path(
   "ibge"
 )
 
+DIR_REFERENCIAS_COALE_DEMENY <- file.path(
+  DIR_REFERENCIAS,
+  "coale_demeny"
+)
+
 # ------------------------------------------------------------
 # Tabelas de mortalidade - IBGE
 # Projecoes da Populacao, Revisao 2024
