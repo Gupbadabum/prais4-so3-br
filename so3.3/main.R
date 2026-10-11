@@ -4,15 +4,59 @@
 # ORQUESTRADOR PRINCIPAL
 # ============================================================
 #
-# Executar a partir da raiz do repositorio:
+# Filosofia operacional:
 #
-#   prais4-so3-br/
+#   uma execucao = uma dimensao + um ano
+#
+# Exemplo, a partir da raiz do repositorio:
+#
+#   DIMENSAO_ATIVA <- "social"
+#   ANO_ATIVO <- 2010L
+#   source("so3.3/main.R")
+#
+# O processamento censitario gera produtos brutos e
+# intermediarios com checkpoints em disco. Winsorizacao e
+# Box-Cox pertencem a uma etapa posterior, quando os tres
+# recortes temporais ja estiverem reduzidos a bases municipais.
 #
 # ============================================================
 
 
 # ============================================================
-# 0. PACOTES
+# 0. SELECAO DA EXECUCAO
+# ============================================================
+
+if (!exists("DIMENSAO_ATIVA", inherits = TRUE)) {
+  stop(
+    "Defina DIMENSAO_ATIVA antes de executar o main.R. ",
+    "Exemplo: DIMENSAO_ATIVA <- 'social'"
+  )
+}
+
+if (!exists("ANO_ATIVO", inherits = TRUE)) {
+  stop(
+    "Defina ANO_ATIVO antes de executar o main.R. ",
+    "Exemplo: ANO_ATIVO <- 2010L"
+  )
+}
+
+DIMENSAO_ATIVA <-
+  tolower(
+    trimws(
+      as.character(
+        DIMENSAO_ATIVA
+      )
+    )
+  )
+
+ANO_ATIVO <-
+  as.integer(
+    ANO_ATIVO
+  )
+
+
+# ============================================================
+# 1. DEPENDENCIAS BASICAS
 # ============================================================
 
 if (!requireNamespace("data.table", quietly = TRUE)) {
@@ -21,255 +65,174 @@ if (!requireNamespace("data.table", quietly = TRUE)) {
   )
 }
 
-if (!requireNamespace("readxl", quietly = TRUE)) {
-  stop(
-    "O pacote 'readxl' e necessario para o processamento."
-  )
-}
 
 # ============================================================
-# 1. CONFIGURACAO
+# 2. CONFIGURACAO
 # ============================================================
 
 source(
   "so3.3/config/config.R"
 )
 
-source(
+# config_local.R contem somente caminhos/ajustes da maquina.
+# Ele e opcional para execucoes que nao dependam de arquivos
+# locais, como a leitura 2010 via censobr.
+
+ARQ_CONFIG_LOCAL <-
   "so3.3/config/config_local.R"
+
+if (file.exists(ARQ_CONFIG_LOCAL)) {
+  source(
+    ARQ_CONFIG_LOCAL
+  )
+}
+
+
+# ============================================================
+# 3. VALIDACAO DA CHAMADA
+# ============================================================
+
+if (!DIMENSAO_ATIVA %in% DIMENSOES_DVI) {
+  stop(
+    "Dimensao invalida: ",
+    DIMENSAO_ATIVA,
+    ". Permitidas: ",
+    paste(
+      DIMENSOES_DVI,
+      collapse = ", "
+    )
+  )
+}
+
+if (!ANO_ATIVO %in% ANOS_DVI) {
+  stop(
+    "Ano invalido: ",
+    ANO_ATIVO,
+    ". Permitidos: ",
+    paste(
+      ANOS_DVI,
+      collapse = ", "
+    )
+  )
+}
+
+
+message(
+  "PRAIS4 SO3.3 | dimensao = ",
+  DIMENSAO_ATIVA,
+  " | ano = ",
+  ANO_ATIVO
 )
 
 
 # ============================================================
-# 2. FUNCOES DE LEITURA E HARMONIZACAO
+# 4. DIMENSAO SOCIAL
 # ============================================================
 
-source(
-  "so3.3/R/01_leitura/adaptar_censo_2022.R"
-)
+if (DIMENSAO_ATIVA == "social") {
 
-source(
-  "so3.3/R/02_indicadores/social.R"
-)
+  source(
+    "so3.3/R/02_indicadores/social.R"
+  )
 
-source(
-  "so3.3/R/03_diagnostico/diagnostico_indicadores.R"
-)
-
-source(
-  "so3.3/R/02_indicadores/expectativa_vida_indireta.R"
-)
-
-source(
-  "so3.3/R/01_leitura/ler_tabuas_mortalidade_ibge.R"
-)
-
-source(
-  "so3.3/R/01_leitura/ler_coale_demeny_west.R"
-)
-
-# ============================================================
-# 3. PREPARACAO DAS FONTES
-# ============================================================
-
-# ------------------------------------------------------------
-# Censo Demografico 2022
-# ------------------------------------------------------------
-
-censo_2022 <- preparar_censo_2022()
-
-# ------------------------------------------------------------
-# Tabuas de mortalidade - IBGE
-# Projecoes da Populacao, Revisao 2024
-# ------------------------------------------------------------
-
-tabuas_mortalidade_ibge <-
-  ler_tabuas_mortalidade_ibge()
-  
-# ------------------------------------------------------------
-# Tabuas-modelo Coale-Demeny
-# Familia West
-# ------------------------------------------------------------
-
-coale_demeny_west <-
-  ler_coale_demeny_west()
-
-# ============================================================
-# 5. DIMENSAO SOCIAL
-# CENSO DEMOGRAFICO 2022
-# ============================================================
-
-# ------------------------------------------------------------
-# Processamento nacional
-#
-# Cada UF e:
-#
-#   1. lida;
-#   2. adaptada para a estrutura canonica;
-#   3. transformada em indicadores municipais;
-#   4. reduzida ao resultado agregado.
-#
-# Os microdados das 27 UFs nao permanecem simultaneamente
-# em memoria.
-# ------------------------------------------------------------
-
-# ============================================================
-# SOCIAL - CENSO 2022
-# ============================================================
-
-processamento_social_2022 <- processar_social_censo(
-  arquivos = censo_2022$arquivos,
-  adaptar_fun = adaptar_censo_2022
-)
-
-social_2022 		<- processamento_social_2022$direto
-
-insumos_ev0_2022 	<- processamento_social_2022$ev0
-
-mortalidade_trussell_2022 <- estimar_mortalidade_trussell(
-  insumos_ev0_2022
-)
-
-# ============================================================
-# DIAGNOSTICO - SOCIAL 2022
-# ============================================================
-
-diagnostico_social_2022 <- diagnosticar_indicadores(
-  social_2022,
-  n_extremos = 10L
-)
-
-
-# ------------------------------------------------------------
-# Controle especifico dos indicadores percentuais
-# ------------------------------------------------------------
-
-problemas_intervalo_social_2022 <-
-  verificar_intervalo_indicadores(
-    social_2022,
-    indicadores = c(
-      "SOC01_ALF15",
-      "SOC02_RURAL",
-      "SOC04_POP1564"
-    ),
-    minimo = 0,
-    maximo = 100
+  source(
+    "so3.3/R/02_indicadores/expectativa_vida_indireta.R"
   )
 
 
-# ------------------------------------------------------------
-# Portas de controle
-# ------------------------------------------------------------
+  # ----------------------------------------------------------
+  # Estabilizacao q(5) EB
+  #
+  # O arquivo pode existir apenas na arvore local durante a
+  # transicao. Quando presente, ele e carregado e o executor
+  # produz automaticamente os checkpoints do EB.
+  # ----------------------------------------------------------
 
-if (
-  nrow(
-    diagnostico_social_2022$duplicidades
-  ) > 0L
-) {
+  ARQ_ESTABILIZACAO_Q5_EB <-
+    "so3.3/R/02_indicadores/estabilizacao_q5_eb.R"
+
+  if (file.exists(ARQ_ESTABILIZACAO_Q5_EB)) {
+
+    source(
+      ARQ_ESTABILIZACAO_Q5_EB
+    )
+
+  } else {
+
+    warning(
+      "Arquivo de estabilizacao q(5) EB nao encontrado. ",
+      "A execucao seguira ate Brass-Trussell e preservara ",
+      "os checkpoints disponiveis."
+    )
+  }
+
+
+  # ----------------------------------------------------------
+  # Adaptador especifico do recorte censitario
+  # ----------------------------------------------------------
+
+  if (ANO_ATIVO == 2010L) {
+
+    source(
+      "so3.3/R/01_leitura/adaptar_censo_2010.R"
+    )
+  }
+
+
+  if (ANO_ATIVO == 2022L) {
+
+    source(
+      "so3.3/R/01_leitura/adaptar_censo_2022.R"
+    )
+  }
+
+
+  # 2000 sera habilitado somente quando seu adaptador for
+  # migrado e validado na nova arquitetura.
+
+
+  source(
+    "so3.3/R/04_execucao/processar_social.R"
+  )
+
+
+  resultado_execucao <-
+    processar_dimensao_social(
+      ano = ANO_ATIVO,
+      executar_soc03 = TRUE,
+      executar_eb = TRUE
+    )
+
+
+  message(
+    "Execucao concluida: Social ",
+    ANO_ATIVO,
+    "."
+  )
+}
+
+
+# ============================================================
+# 5. DIMENSAO ECONOMICA
+# ============================================================
+
+if (DIMENSAO_ATIVA == "economica") {
 
   stop(
-    "Foram encontradas duplicidades na base Social 2022."
-  )
-}
-
-
-if (
-  nrow(
-    diagnostico_social_2022$
-      problemas_consistencia_sexo
-  ) > 0L
-) {
-
-  warning(
-    "Foram encontradas inconsistencias entre Total, ",
-    "Masculino e Feminino na base Social 2022."
-  )
-}
-
-
-if (
-  nrow(
-    problemas_intervalo_social_2022
-  ) > 0L
-) {
-
-  warning(
-    "Foram encontrados valores ausentes ou fora de ",
-    "[0,100] nos indicadores sociais percentuais de 2022."
+    "A dimensao Economica ainda nao foi migrada para o ",
+    "dispatcher por dimensao + ano."
   )
 }
 
 
 # ============================================================
-# 6. DIMENSAO ECONOMICA
-# ============================================================
-#
-# Ainda nao implementado.
+# 6. DIMENSAO INFRAESTRUTURAL
 # ============================================================
 
+if (DIMENSAO_ATIVA == "infraestrutural") {
 
-# ============================================================
-# 7. DIMENSAO INFRAESTRUTURAL
-# ============================================================
-#
-# Ainda nao implementado.
-# ============================================================
-
-
-# ============================================================
-# 8. CONSOLIDACAO DOS INDICADORES
-# ============================================================
-#
-# Ainda nao implementado.
-# ============================================================
-
-
-# ============================================================
-# 9. DIAGNOSTICO
-# ============================================================
-#
-# Ainda nao implementado.
-# ============================================================
-
-
-# ============================================================
-# 10. TRATAMENTO ESTATISTICO
-# ============================================================
-#
-# Winsorizacao
-# Box-Cox
-#
-# Ainda nao implementado.
-# ============================================================
-
-
-# ============================================================
-# 11. NORMALIZACAO
-# ============================================================
-#
-# Ainda nao implementado.
-# ============================================================
-
-
-# ============================================================
-# 12. COMPONENTES DAS DIMENSOES
-# ============================================================
-#
-# Ainda nao implementado.
-# ============================================================
-
-
-# ============================================================
-# 13. DVI
-# ============================================================
-#
-# Ainda nao implementado.
-# ============================================================
-
-
-# ============================================================
-# 14. EXPORTACAO
-# ============================================================
-#
-# Ainda nao implementado.
-# ============================================================
+  stop(
+    "A dimensao Infraestrutural ainda nao foi migrada para o ",
+    "dispatcher por dimensao + ano."
+  )
+}
