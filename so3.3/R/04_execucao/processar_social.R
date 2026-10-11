@@ -586,18 +586,194 @@ processar_social_2022 <- function(
       preparar_censo_2022()
 
 
-    processamento <-
-      processar_social_censo(
-        arquivos = censo_2022$arquivos,
-        adaptar_fun = adaptar_censo_2022
+    # --------------------------------------------------------
+    # Checkpoints por UF
+    #
+    # Cada arquivo controlado e:
+    #   1. lido individualmente;
+    #   2. convertido para a estrutura canonica;
+    #   3. reduzido aos produtos municipais;
+    #   4. salvo imediatamente;
+    #   5. removido da memoria.
+    #
+    # Se a execucao for interrompida, as UFs ja concluidas
+    # sao reutilizadas na proxima chamada.
+    # --------------------------------------------------------
+
+    dir_partes <- file.path(
+      dirs$intermediario,
+      "partes_censo_2022"
+    )
+
+    dir.create(
+      dir_partes,
+      recursive = TRUE,
+      showWarnings = FALSE
+    )
+
+
+    resultados_direto <-
+      vector(
+        "list",
+        length(censo_2022$arquivos)
+      )
+
+    resultados_ev0 <-
+      vector(
+        "list",
+        length(censo_2022$arquivos)
       )
 
 
+    for (i in seq_along(censo_2022$arquivos)) {
+
+      arq <- censo_2022$arquivos[i]
+
+      uf_atual <-
+        extrair_uf_2022(
+          arq
+        )
+
+
+      arq_parte_direto <- file.path(
+        dir_partes,
+        paste0(
+          "social_direto_2022_UF",
+          uf_atual,
+          ".rds"
+        )
+      )
+
+      arq_parte_ev0 <- file.path(
+        dir_partes,
+        paste0(
+          "insumos_ev0_2022_UF",
+          uf_atual,
+          ".rds"
+        )
+      )
+
+
+      parte_completa <-
+        file.exists(arq_parte_direto) &&
+        file.exists(arq_parte_ev0) &&
+        !isTRUE(forcar_recalculo)
+
+
+      if (parte_completa) {
+
+        message(
+          sprintf(
+            "[%02d/%02d] Social 2022 - UF %s | checkpoint",
+            i,
+            length(censo_2022$arquivos),
+            uf_atual
+          )
+        )
+
+        resultados_direto[[i]] <-
+          carregar_rds_social(
+            arq_parte_direto
+          )
+
+        resultados_ev0[[i]] <-
+          carregar_rds_social(
+            arq_parte_ev0
+          )
+
+      } else {
+
+        message(
+          sprintf(
+            "[%02d/%02d] Social 2022 - UF %s | processamento",
+            i,
+            length(censo_2022$arquivos),
+            uf_atual
+          )
+        )
+
+
+        dados_uf <-
+          adaptar_censo_2022(
+            arq
+          )
+
+
+        direto_uf <-
+          calcular_social_direto(
+            dados_uf
+          )
+
+
+        ev0_uf <-
+          preparar_insumos_soc03_ev0(
+            dados_uf
+          )
+
+
+        salvar_rds_social(
+          direto_uf,
+          arq_parte_direto
+        )
+
+
+        salvar_rds_social(
+          ev0_uf,
+          arq_parte_ev0
+        )
+
+
+        resultados_direto[[i]] <-
+          direto_uf
+
+        resultados_ev0[[i]] <-
+          ev0_uf
+
+
+        rm(
+          dados_uf,
+          direto_uf,
+          ev0_uf
+        )
+
+        invisible(
+          gc()
+        )
+      }
+    }
+
+
     social_direto <-
-      processamento$direto
+      data.table::rbindlist(
+        resultados_direto,
+        use.names = TRUE,
+        fill = TRUE
+      )
+
 
     insumos_ev0 <-
-      processamento$ev0
+      data.table::rbindlist(
+        resultados_ev0,
+        use.names = TRUE,
+        fill = TRUE
+      )
+
+
+    data.table::setorder(
+      social_direto,
+      indicador,
+      cod_mun,
+      grupo
+    )
+
+
+    data.table::setorder(
+      insumos_ev0,
+      ano,
+      cod_mun,
+      grupo,
+      idade_mae
+    )
 
 
     salvar_rds_social(
@@ -609,6 +785,17 @@ processar_social_2022 <- function(
     salvar_rds_social(
       insumos_ev0,
       arq_insumos_ev0
+    )
+
+
+    rm(
+      resultados_direto,
+      resultados_ev0,
+      censo_2022
+    )
+
+    invisible(
+      gc()
     )
   }
 
