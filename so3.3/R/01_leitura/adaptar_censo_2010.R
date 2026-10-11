@@ -161,8 +161,11 @@ adaptar_censo_2010_uf <- function(
   # ----------------------------------------------------------
 
   sem_filhos <-
+    !is.na(d$V0601) &
     d$V0601 == 2 &
+    !is.na(d$V0663) &
     d$V0663 == 2 &
+    !is.na(d$V6633) &
     d$V6633 == 0
 
   colunas_zero_estrutural <- c(
