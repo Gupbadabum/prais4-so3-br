@@ -54,6 +54,15 @@ ANO_ATIVO <-
     ANO_ATIVO
   )
 
+if (!exists("FORCAR_RECALCULO", inherits = TRUE)) {
+  FORCAR_RECALCULO <- FALSE
+}
+
+FORCAR_RECALCULO <-
+  isTRUE(
+    FORCAR_RECALCULO
+  )
+
 
 # ============================================================
 # 1. DEPENDENCIAS BASICAS
@@ -121,7 +130,9 @@ message(
   "PRAIS4 SO3.3 | dimensao = ",
   DIMENSAO_ATIVA,
   " | ano = ",
-  ANO_ATIVO
+  ANO_ATIVO,
+  " | forcar_recalculo = ",
+  FORCAR_RECALCULO
 )
 
 
@@ -200,7 +211,8 @@ if (DIMENSAO_ATIVA == "social") {
     processar_dimensao_social(
       ano = ANO_ATIVO,
       executar_soc03 = TRUE,
-      executar_eb = TRUE
+      executar_eb = TRUE,
+      forcar_recalculo = FORCAR_RECALCULO
     )
 
 
