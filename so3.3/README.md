@@ -133,3 +133,18 @@ Além dos valores municipais ponderados, são preservados `n_amostra` e `n_efeti
 ## Tratamento temporal
 
 A winsorização e a transformação Box-Cox serão avaliadas somente após a consolidação dos três recortes censitários. O tratamento será realizado com os anos combinados dentro de cada indicador, mantendo separação entre os grupos Total, Masculino e Feminino.
+
+
+## Execução por dimensão + ano
+
+A unidade operacional do processamento é uma combinação de dimensão e ano. Isso reduz o uso de memória e evita manter múltiplos censos e objetos intermediários simultaneamente na sessão.
+
+Exemplo de chamada:
+
+    DIMENSAO_ATIVA <- "social"
+    ANO_ATIVO <- 2010L
+    source("so3.3/main.R")
+
+Para 2010, o Censo é mantido como Arrow Dataset e apenas uma UF é materializada por vez. Após o cálculo dos resultados municipais, os microdados da UF são removidos da memória.
+
+Os resultados são gravados em checkpoints sob outputs/bruto/<dimensao>/<ano>/ e outputs/intermediario/<dimensao>/<ano>/. O tratamento estatístico temporal continua separado: winsorização e Box-Cox só devem ser avaliadas depois que 2000, 2010 e 2022 estiverem reduzidos a bases municipais.
