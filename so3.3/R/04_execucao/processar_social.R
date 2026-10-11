@@ -12,6 +12,10 @@
 # e intermediarios metodologicos sao gravados em disco assim
 # que ficam disponiveis.
 #
+# Checkpoints existentes sao reutilizados por padrao. O
+# recálculo completo ocorre apenas quando forcar_recalculo
+# for explicitamente TRUE.
+#
 # O tratamento estatistico temporal (winsorizacao / Box-Cox)
 # NAO ocorre aqui. Ele deve ser executado posteriormente com
 # os tres recortes censitarios ja reduzidos a bases municipais.
@@ -60,13 +64,13 @@ diretorios_social_ano <- function(
 
 salvar_rds_social <- function(
   objeto,
-  diretorio,
-  nome
+  caminho
 ) {
 
-  caminho <- file.path(
-    diretorio,
-    nome
+  dir.create(
+    dirname(caminho),
+    recursive = TRUE,
+    showWarnings = FALSE
   )
 
   saveRDS(
@@ -85,6 +89,23 @@ salvar_rds_social <- function(
 }
 
 
+carregar_rds_social <- function(
+  caminho
+) {
+
+  objeto <- readRDS(
+    caminho
+  )
+
+  message(
+    "Checkpoint carregado: ",
+    caminho
+  )
+
+  objeto
+}
+
+
 # ============================================================
 # 2. SOC03 - ETAPAS DEMOGRAFICAS
 # ============================================================
@@ -93,16 +114,11 @@ processar_soc03_intermediarios <- function(
   insumos_ev0,
   ano,
   dir_intermediario,
-  executar_eb = TRUE
+  executar_eb = TRUE,
+  forcar_recalculo = FALSE
 ) {
 
-  mortalidade_trussell <-
-    estimar_mortalidade_trussell(
-      insumos_ev0
-    )
-
-  salvar_rds_social(
-    mortalidade_trussell,
+  arq_trussell <- file.path(
     dir_intermediario,
     paste0(
       "mortalidade_trussell_",
@@ -111,6 +127,52 @@ processar_soc03_intermediarios <- function(
     )
   )
 
+  arq_insumos_q5 <- file.path(
+    dir_intermediario,
+    paste0(
+      "insumos_q5_",
+      ano,
+      "_normalizada_amostra.rds"
+    )
+  )
+
+  arq_q5_eb <- file.path(
+    dir_intermediario,
+    paste0(
+      "q5_eb_",
+      ano,
+      "_normalizada_amostra.rds"
+    )
+  )
+
+
+  # ----------------------------------------------------------
+  # Brass-Trussell
+  # ----------------------------------------------------------
+
+  if (
+    file.exists(arq_trussell) &&
+      !isTRUE(forcar_recalculo)
+  ) {
+
+    mortalidade_trussell <-
+      carregar_rds_social(
+        arq_trussell
+      )
+
+  } else {
+
+    mortalidade_trussell <-
+      estimar_mortalidade_trussell(
+        insumos_ev0
+      )
+
+    salvar_rds_social(
+      mortalidade_trussell,
+      arq_trussell
+    )
+  }
+
 
   resultado <- list(
     mortalidade_trussell =
@@ -118,45 +180,91 @@ processar_soc03_intermediarios <- function(
   )
 
 
+  if (!isTRUE(executar_eb)) {
+    return(
+      resultado
+    )
+  }
+
+
   # ----------------------------------------------------------
-  # EB e opcional nesta camada.
+  # Funcoes do EB
   #
-  # A funcao so e executada quando o arquivo metodologico
-  # correspondente foi carregado na sessao.
+  # Se os dois checkpoints EB ja existirem, eles podem ser
+  # recuperados sem recalculo. As funcoes somente sao
+  # obrigatorias quando alguma etapa precisa ser produzida.
   # ----------------------------------------------------------
 
-  if (isTRUE(executar_eb)) {
+  checkpoints_eb_completos <-
+    file.exists(arq_insumos_q5) &&
+    file.exists(arq_q5_eb) &&
+    !isTRUE(forcar_recalculo)
 
-    funcoes_eb <- c(
-      "preparar_insumos_q5_eb",
-      "estabilizar_q5_eb"
+
+  if (checkpoints_eb_completos) {
+
+    resultado$insumos_q5 <-
+      carregar_rds_social(
+        arq_insumos_q5
+      )
+
+    resultado$q5_eb <-
+      carregar_rds_social(
+        arq_q5_eb
+      )
+
+    return(
+      resultado
+    )
+  }
+
+
+  funcoes_eb <- c(
+    "preparar_insumos_q5_eb",
+    "estabilizar_q5_eb"
+  )
+
+  faltantes_eb <- funcoes_eb[
+    !vapply(
+      funcoes_eb,
+      exists,
+      logical(1),
+      mode = "function",
+      inherits = TRUE
+    )
+  ]
+
+  if (length(faltantes_eb) > 0L) {
+
+    warning(
+      "Etapa EB nao executada. Funcoes ausentes: ",
+      paste(
+        faltantes_eb,
+        collapse = ", "
+      )
     )
 
-    faltantes_eb <- funcoes_eb[
-      !vapply(
-        funcoes_eb,
-        exists,
-        logical(1),
-        mode = "function",
-        inherits = TRUE
+    return(
+      resultado
+    )
+  }
+
+
+  # ----------------------------------------------------------
+  # Insumos EB
+  # ----------------------------------------------------------
+
+  if (
+    file.exists(arq_insumos_q5) &&
+      !isTRUE(forcar_recalculo)
+  ) {
+
+    insumos_q5 <-
+      carregar_rds_social(
+        arq_insumos_q5
       )
-    ]
 
-    if (length(faltantes_eb) > 0L) {
-
-      warning(
-        "Etapa EB nao executada. Funcoes ausentes: ",
-        paste(
-          faltantes_eb,
-          collapse = ", "
-        )
-      )
-
-      return(
-        resultado
-      )
-    }
-
+  } else {
 
     insumos_q5 <-
       preparar_insumos_q5_eb(
@@ -166,14 +274,35 @@ processar_soc03_intermediarios <- function(
 
     salvar_rds_social(
       insumos_q5,
-      dir_intermediario,
-      paste0(
-        "insumos_q5_",
-        ano,
-        "_normalizada_amostra.rds"
-      )
+      arq_insumos_q5
     )
+  }
 
+
+  # ----------------------------------------------------------
+  # q(5) estabilizado por EB
+  #
+  # Especificacao principal:
+  #
+  #   - gama-Poisson;
+  #   - sem covariaveis;
+  #   - hiperparametro nacional por ano x grupo;
+  #   - D_UF;
+  #   - k_UF e t_UF;
+  #   - intervalo posterior aproximado de 90%.
+  # ----------------------------------------------------------
+
+  if (
+    file.exists(arq_q5_eb) &&
+      !isTRUE(forcar_recalculo)
+  ) {
+
+    q5_eb <-
+      carregar_rds_social(
+        arq_q5_eb
+      )
+
+  } else {
 
     q5_eb <-
       estabilizar_q5_eb(
@@ -187,19 +316,13 @@ processar_soc03_intermediarios <- function(
 
     salvar_rds_social(
       q5_eb,
-      dir_intermediario,
-      paste0(
-        "q5_eb_",
-        ano,
-        "_normalizada_amostra.rds"
-      )
+      arq_q5_eb
     )
-
-
-    resultado$insumos_q5 <- insumos_q5
-    resultado$q5_eb <- q5_eb
   }
 
+
+  resultado$insumos_q5 <- insumos_q5
+  resultado$q5_eb <- q5_eb
 
   resultado
 }
@@ -212,148 +335,178 @@ processar_soc03_intermediarios <- function(
 processar_social_2010 <- function(
   executar_soc03 = TRUE,
   executar_eb = TRUE,
-  showProgress = TRUE
+  showProgress = TRUE,
+  forcar_recalculo = FALSE
 ) {
 
   dirs <- diretorios_social_ano(
     2010L
   )
 
-
-  message(
-    "Abrindo Censo 2010 como Arrow Dataset..."
+  arq_social_direto <- file.path(
+    dirs$bruto,
+    "social_direto_2010.rds"
   )
 
-  censo_arrow <-
-    abrir_censo_2010_social(
-      showProgress = showProgress
-    )
+  arq_insumos_ev0 <- file.path(
+    dirs$intermediario,
+    "insumos_ev0_2010.rds"
+  )
 
 
-  ufs <-
-    listar_ufs_censo_2010(
-      censo_arrow
-    )
+  checkpoints_censo_completos <-
+    file.exists(arq_social_direto) &&
+    file.exists(arq_insumos_ev0) &&
+    !isTRUE(forcar_recalculo)
 
 
-  resultados_direto <-
-    vector(
-      "list",
-      length(ufs)
-    )
+  if (checkpoints_censo_completos) {
 
-  resultados_ev0 <-
-    vector(
-      "list",
-      length(ufs)
-    )
+    social_direto <-
+      carregar_rds_social(
+        arq_social_direto
+      )
 
+    insumos_ev0 <-
+      carregar_rds_social(
+        arq_insumos_ev0
+      )
 
-  for (i in seq_along(ufs)) {
-
-    uf_atual <- ufs[i]
+  } else {
 
     message(
-      sprintf(
-        "[%02d/%02d] Social 2010 - UF %02d",
-        i,
-        length(ufs),
-        uf_atual
+      "Abrindo Censo 2010 como Arrow Dataset..."
+    )
+
+    censo_arrow <-
+      abrir_censo_2010_social(
+        showProgress = showProgress
       )
+
+
+    ufs <-
+      listar_ufs_censo_2010(
+        censo_arrow
+      )
+
+
+    resultados_direto <-
+      vector(
+        "list",
+        length(ufs)
+      )
+
+    resultados_ev0 <-
+      vector(
+        "list",
+        length(ufs)
+      )
+
+
+    for (i in seq_along(ufs)) {
+
+      uf_atual <- ufs[i]
+
+      message(
+        sprintf(
+          "[%02d/%02d] Social 2010 - UF %02d",
+          i,
+          length(ufs),
+          uf_atual
+        )
+      )
+
+
+      dados_uf <-
+        coletar_uf_censo_2010(
+          censo_arrow,
+          uf_atual
+        )
+
+
+      dados_uf <-
+        adaptar_censo_2010_uf(
+          dados_uf
+        )
+
+
+      resultados_direto[[i]] <-
+        calcular_social_direto(
+          dados_uf
+        )
+
+
+      resultados_ev0[[i]] <-
+        preparar_insumos_soc03_ev0(
+          dados_uf
+        )
+
+
+      rm(
+        dados_uf
+      )
+
+      invisible(
+        gc()
+      )
+    }
+
+
+    social_direto <-
+      data.table::rbindlist(
+        resultados_direto,
+        use.names = TRUE,
+        fill = TRUE
+      )
+
+
+    insumos_ev0 <-
+      data.table::rbindlist(
+        resultados_ev0,
+        use.names = TRUE,
+        fill = TRUE
+      )
+
+
+    data.table::setorder(
+      social_direto,
+      indicador,
+      cod_mun,
+      grupo
     )
 
 
-    dados_uf <-
-      coletar_uf_censo_2010(
-        censo_arrow,
-        uf_atual
-      )
+    data.table::setorder(
+      insumos_ev0,
+      ano,
+      cod_mun,
+      grupo,
+      idade_mae
+    )
 
 
-    dados_uf <-
-      adaptar_censo_2010_uf(
-        dados_uf
-      )
+    salvar_rds_social(
+      social_direto,
+      arq_social_direto
+    )
 
 
-    resultados_direto[[i]] <-
-      calcular_social_direto(
-        dados_uf
-      )
-
-
-    resultados_ev0[[i]] <-
-      preparar_insumos_soc03_ev0(
-        dados_uf
-      )
+    salvar_rds_social(
+      insumos_ev0,
+      arq_insumos_ev0
+    )
 
 
     rm(
-      dados_uf
+      resultados_direto,
+      resultados_ev0,
+      censo_arrow
     )
 
     invisible(
       gc()
     )
   }
-
-
-  social_direto <-
-    data.table::rbindlist(
-      resultados_direto,
-      use.names = TRUE,
-      fill = TRUE
-    )
-
-
-  insumos_ev0 <-
-    data.table::rbindlist(
-      resultados_ev0,
-      use.names = TRUE,
-      fill = TRUE
-    )
-
-
-  data.table::setorder(
-    social_direto,
-    indicador,
-    cod_mun,
-    grupo
-  )
-
-
-  data.table::setorder(
-    insumos_ev0,
-    ano,
-    cod_mun,
-    grupo,
-    idade_mae
-  )
-
-
-  salvar_rds_social(
-    social_direto,
-    dirs$bruto,
-    "social_direto_2010.rds"
-  )
-
-
-  salvar_rds_social(
-    insumos_ev0,
-    dirs$intermediario,
-    "insumos_ev0_2010.rds"
-  )
-
-
-  rm(
-    resultados_direto,
-    resultados_ev0,
-    censo_arrow
-  )
-
-  invisible(
-    gc()
-  )
 
 
   resultado <- list(
@@ -371,7 +524,9 @@ processar_social_2010 <- function(
         dir_intermediario =
           dirs$intermediario,
         executar_eb =
-          executar_eb
+          executar_eb,
+        forcar_recalculo =
+          forcar_recalculo
       )
 
     resultado$soc03 <- soc03
@@ -388,44 +543,74 @@ processar_social_2010 <- function(
 
 processar_social_2022 <- function(
   executar_soc03 = TRUE,
-  executar_eb = TRUE
+  executar_eb = TRUE,
+  forcar_recalculo = FALSE
 ) {
 
   dirs <- diretorios_social_ano(
     2022L
   )
 
-
-  censo_2022 <-
-    preparar_censo_2022()
-
-
-  processamento <-
-    processar_social_censo(
-      arquivos = censo_2022$arquivos,
-      adaptar_fun = adaptar_censo_2022
-    )
-
-
-  social_direto <-
-    processamento$direto
-
-  insumos_ev0 <-
-    processamento$ev0
-
-
-  salvar_rds_social(
-    social_direto,
+  arq_social_direto <- file.path(
     dirs$bruto,
     "social_direto_2022.rds"
   )
 
-
-  salvar_rds_social(
-    insumos_ev0,
+  arq_insumos_ev0 <- file.path(
     dirs$intermediario,
     "insumos_ev0_2022.rds"
   )
+
+
+  checkpoints_censo_completos <-
+    file.exists(arq_social_direto) &&
+    file.exists(arq_insumos_ev0) &&
+    !isTRUE(forcar_recalculo)
+
+
+  if (checkpoints_censo_completos) {
+
+    social_direto <-
+      carregar_rds_social(
+        arq_social_direto
+      )
+
+    insumos_ev0 <-
+      carregar_rds_social(
+        arq_insumos_ev0
+      )
+
+  } else {
+
+    censo_2022 <-
+      preparar_censo_2022()
+
+
+    processamento <-
+      processar_social_censo(
+        arquivos = censo_2022$arquivos,
+        adaptar_fun = adaptar_censo_2022
+      )
+
+
+    social_direto <-
+      processamento$direto
+
+    insumos_ev0 <-
+      processamento$ev0
+
+
+    salvar_rds_social(
+      social_direto,
+      arq_social_direto
+    )
+
+
+    salvar_rds_social(
+      insumos_ev0,
+      arq_insumos_ev0
+    )
+  }
 
 
   resultado <- list(
@@ -443,7 +628,9 @@ processar_social_2022 <- function(
         dir_intermediario =
           dirs$intermediario,
         executar_eb =
-          executar_eb
+          executar_eb,
+        forcar_recalculo =
+          forcar_recalculo
       )
 
     resultado$soc03 <- soc03
@@ -461,7 +648,8 @@ processar_social_2022 <- function(
 processar_dimensao_social <- function(
   ano,
   executar_soc03 = TRUE,
-  executar_eb = TRUE
+  executar_eb = TRUE,
+  forcar_recalculo = FALSE
 ) {
 
   ano <- as.integer(
@@ -482,7 +670,8 @@ processar_dimensao_social <- function(
     return(
       processar_social_2010(
         executar_soc03 = executar_soc03,
-        executar_eb = executar_eb
+        executar_eb = executar_eb,
+        forcar_recalculo = forcar_recalculo
       )
     )
   }
@@ -493,7 +682,8 @@ processar_dimensao_social <- function(
     return(
       processar_social_2022(
         executar_soc03 = executar_soc03,
-        executar_eb = executar_eb
+        executar_eb = executar_eb,
+        forcar_recalculo = forcar_recalculo
       )
     )
   }
