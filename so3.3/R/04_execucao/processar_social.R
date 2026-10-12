@@ -390,6 +390,26 @@ processar_social_2000 <- function(
       )
 
 
+    # --------------------------------------------------------
+    # Checkpoints por UF
+    #
+    # Cada UF e reduzida aos produtos municipais e salva
+    # imediatamente. Em caso de interrupcao, as UFs ja
+    # concluidas sao reutilizadas na proxima chamada.
+    # --------------------------------------------------------
+
+    dir_partes <- file.path(
+      dirs$intermediario,
+      "partes_censo_2000"
+    )
+
+    dir.create(
+      dir_partes,
+      recursive = TRUE,
+      showWarnings = FALSE
+    )
+
+
     resultados_direto <-
       vector(
         "list",
@@ -407,48 +427,123 @@ processar_social_2000 <- function(
 
       uf_atual <- ufs[i]
 
-      message(
-        sprintf(
-          "[%02d/%02d] Social 2000 - UF %02d",
-          i,
-          length(ufs),
-          uf_atual
+      uf_chr <- sprintf(
+        "%02d",
+        uf_atual
+      )
+
+      arq_parte_direto <- file.path(
+        dir_partes,
+        paste0(
+          "social_direto_2000_UF",
+          uf_chr,
+          ".rds"
+        )
+      )
+
+      arq_parte_ev0 <- file.path(
+        dir_partes,
+        paste0(
+          "insumos_ev0_2000_UF",
+          uf_chr,
+          ".rds"
         )
       )
 
 
-      dados_uf <-
-        coletar_uf_censo_2000(
-          censo_arrow,
-          uf_atual
+      parte_completa <-
+        file.exists(arq_parte_direto) &&
+        file.exists(arq_parte_ev0) &&
+        !isTRUE(forcar_recalculo)
+
+
+      if (parte_completa) {
+
+        message(
+          sprintf(
+            "[%02d/%02d] Social 2000 - UF %02d | checkpoint",
+            i,
+            length(ufs),
+            uf_atual
+          )
+        )
+
+        resultados_direto[[i]] <-
+          carregar_rds_social(
+            arq_parte_direto
+          )
+
+        resultados_ev0[[i]] <-
+          carregar_rds_social(
+            arq_parte_ev0
+          )
+
+      } else {
+
+        message(
+          sprintf(
+            "[%02d/%02d] Social 2000 - UF %02d | processamento",
+            i,
+            length(ufs),
+            uf_atual
+          )
         )
 
 
-      dados_uf <-
-        adaptar_censo_2000_uf(
-          dados_uf
+        dados_uf <-
+          coletar_uf_censo_2000(
+            censo_arrow,
+            uf_atual
+          )
+
+
+        dados_uf <-
+          adaptar_censo_2000_uf(
+            dados_uf
+          )
+
+
+        direto_uf <-
+          calcular_social_direto(
+            dados_uf
+          )
+
+
+        ev0_uf <-
+          preparar_insumos_soc03_ev0(
+            dados_uf
+          )
+
+
+        salvar_rds_social(
+          direto_uf,
+          arq_parte_direto
         )
 
 
-      resultados_direto[[i]] <-
-        calcular_social_direto(
-          dados_uf
+        salvar_rds_social(
+          ev0_uf,
+          arq_parte_ev0
         )
 
 
-      resultados_ev0[[i]] <-
-        preparar_insumos_soc03_ev0(
-          dados_uf
+        resultados_direto[[i]] <-
+          direto_uf
+
+        resultados_ev0[[i]] <-
+          ev0_uf
+
+
+        rm(
+          dados_uf,
+          direto_uf,
+          ev0_uf
         )
 
-
-      rm(
-        dados_uf
-      )
-
-      invisible(
-        gc()
-      )
+        invisible(
+          gc()
+        )
+      }
     }
 
 
