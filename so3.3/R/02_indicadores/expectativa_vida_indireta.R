@@ -669,7 +669,27 @@ estimar_mortalidade_trussell <- function(
 
 
 # ============================================================
-# 4. CONVERSAO q(x) -> q(5) EQUIVALENTE
+# BLOCO LEGADO / DIAGNOSTICO - ROTA CLASSICA
+# ============================================================
+#
+# As secoes 4, 5 e 6 sao preservadas deliberadamente para
+# auditoria metodologica e revisao por especialistas.
+#
+# Elas registram a rota classica anteriormente avaliada:
+# q(2)/q(3)/q(5) -> equivalencia West -> sintese q5*.
+#
+# Essa rota NAO integra o caminho operacional primario do
+# SO3.3. A especificacao operacional utiliza q(5) de maes
+# 30-34 anos, estabilizacao Empirical Bayes e posterior
+# conversao q(5)_EB -> e0 pela familia Coale-Demeny West.
+#
+# O codigo legado permanece util para diagnostico,
+# sensibilidade e revisao demografica/atuarial.
+# ============================================================
+
+
+# ============================================================
+# 4. [LEGADO] CONVERSAO q(x) -> q(5) EQUIVALENTE
 #    COALE-DEMENY WEST
 # ============================================================
 #
@@ -1245,7 +1265,7 @@ converter_qx_para_q5_west <- function(
 
 
 # ============================================================
-# 5. PADRONIZACAO q2/q3/q5 -> q5 EQUIVALENTE
+# 5. [LEGADO] PADRONIZACAO q2/q3/q5 -> q5 EQUIVALENTE
 # ============================================================
 
 padronizar_q235_para_q5 <- function(
@@ -1702,7 +1722,7 @@ padronizar_q235_para_q5 <- function(
 
 
 # ============================================================
-# 6. SINTESE MUNICIPAL q5*
+# 6. [LEGADO] SINTESE MUNICIPAL q5*
 # ============================================================
 #
 # Decisao metodologica do SO3.3:
