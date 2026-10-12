@@ -78,3 +78,8 @@ so3.3/config/config_local.R
 
 # Microdados / dados brutos locais
 so3.3/data/
+
+# Resultados intermediarios / checkpoints locais do SO3.3
+# Produtos finais auditaveis permanecem versionaveis:
+# bruto, tratado, normalizado, componentes e dvi.
+so3.3/outputs/intermediario/
