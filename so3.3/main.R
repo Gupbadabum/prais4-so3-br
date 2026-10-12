@@ -182,6 +182,14 @@ if (DIMENSAO_ATIVA == "social") {
   # Adaptador especifico do recorte censitario
   # ----------------------------------------------------------
 
+  if (ANO_ATIVO == 2000L) {
+
+    source(
+      "so3.3/R/01_leitura/adaptar_censo_2000.R"
+    )
+  }
+
+
   if (ANO_ATIVO == 2010L) {
 
     source(
@@ -196,11 +204,6 @@ if (DIMENSAO_ATIVA == "social") {
       "so3.3/R/01_leitura/adaptar_censo_2022.R"
     )
   }
-
-
-  # 2000 sera habilitado somente quando seu adaptador for
-  # migrado e validado na nova arquitetura.
-
 
   source(
     "so3.3/R/04_execucao/processar_social.R"
