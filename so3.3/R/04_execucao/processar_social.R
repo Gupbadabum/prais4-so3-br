@@ -329,7 +329,216 @@ processar_soc03_intermediarios <- function(
 
 
 # ============================================================
-# 3. SOCIAL - CENSO 2010
+# 3. SOCIAL - CENSO 2000
+# ============================================================
+
+processar_social_2000 <- function(
+  executar_soc03 = TRUE,
+  executar_eb = TRUE,
+  showProgress = TRUE,
+  forcar_recalculo = FALSE
+) {
+
+  dirs <- diretorios_social_ano(
+    2000L
+  )
+
+  arq_social_direto <- file.path(
+    dirs$bruto,
+    "social_direto_2000.rds"
+  )
+
+  arq_insumos_ev0 <- file.path(
+    dirs$intermediario,
+    "insumos_ev0_2000.rds"
+  )
+
+
+  checkpoints_censo_completos <-
+    file.exists(arq_social_direto) &&
+    file.exists(arq_insumos_ev0) &&
+    !isTRUE(forcar_recalculo)
+
+
+  if (checkpoints_censo_completos) {
+
+    social_direto <-
+      carregar_rds_social(
+        arq_social_direto
+      )
+
+    insumos_ev0 <-
+      carregar_rds_social(
+        arq_insumos_ev0
+      )
+
+  } else {
+
+    message(
+      "Abrindo Censo 2000 como Arrow Dataset..."
+    )
+
+    censo_arrow <-
+      abrir_censo_2000_social(
+        showProgress = showProgress
+      )
+
+
+    ufs <-
+      listar_ufs_censo_2000(
+        censo_arrow
+      )
+
+
+    resultados_direto <-
+      vector(
+        "list",
+        length(ufs)
+      )
+
+    resultados_ev0 <-
+      vector(
+        "list",
+        length(ufs)
+      )
+
+
+    for (i in seq_along(ufs)) {
+
+      uf_atual <- ufs[i]
+
+      message(
+        sprintf(
+          "[%02d/%02d] Social 2000 - UF %02d",
+          i,
+          length(ufs),
+          uf_atual
+        )
+      )
+
+
+      dados_uf <-
+        coletar_uf_censo_2000(
+          censo_arrow,
+          uf_atual
+        )
+
+
+      dados_uf <-
+        adaptar_censo_2000_uf(
+          dados_uf
+        )
+
+
+      resultados_direto[[i]] <-
+        calcular_social_direto(
+          dados_uf
+        )
+
+
+      resultados_ev0[[i]] <-
+        preparar_insumos_soc03_ev0(
+          dados_uf
+        )
+
+
+      rm(
+        dados_uf
+      )
+
+      invisible(
+        gc()
+      )
+    }
+
+
+    social_direto <-
+      data.table::rbindlist(
+        resultados_direto,
+        use.names = TRUE,
+        fill = TRUE
+      )
+
+
+    insumos_ev0 <-
+      data.table::rbindlist(
+        resultados_ev0,
+        use.names = TRUE,
+        fill = TRUE
+      )
+
+
+    data.table::setorder(
+      social_direto,
+      indicador,
+      cod_mun,
+      grupo
+    )
+
+
+    data.table::setorder(
+      insumos_ev0,
+      ano,
+      cod_mun,
+      grupo,
+      idade_mae
+    )
+
+
+    salvar_rds_social(
+      social_direto,
+      arq_social_direto
+    )
+
+
+    salvar_rds_social(
+      insumos_ev0,
+      arq_insumos_ev0
+    )
+
+
+    rm(
+      resultados_direto,
+      resultados_ev0,
+      censo_arrow
+    )
+
+    invisible(
+      gc()
+    )
+  }
+
+
+  resultado <- list(
+    direto = social_direto,
+    ev0 = insumos_ev0
+  )
+
+
+  if (isTRUE(executar_soc03)) {
+
+    soc03 <-
+      processar_soc03_intermediarios(
+        insumos_ev0 = insumos_ev0,
+        ano = 2000L,
+        dir_intermediario =
+          dirs$intermediario,
+        executar_eb =
+          executar_eb,
+        forcar_recalculo =
+          forcar_recalculo
+      )
+
+    resultado$soc03 <- soc03
+  }
+
+
+  resultado
+}
+
+
+# ============================================================
+# 4. SOCIAL - CENSO 2010
 # ============================================================
 
 processar_social_2010 <- function(
@@ -538,7 +747,7 @@ processar_social_2010 <- function(
 
 
 # ============================================================
-# 4. SOCIAL - CENSO 2022
+# 5. SOCIAL - CENSO 2022
 # ============================================================
 
 processar_social_2022 <- function(
@@ -829,7 +1038,7 @@ processar_social_2022 <- function(
 
 
 # ============================================================
-# 5. DISPATCHER DA DIMENSAO SOCIAL
+# 6. DISPATCHER DA DIMENSAO SOCIAL
 # ============================================================
 
 processar_dimensao_social <- function(
@@ -878,11 +1087,12 @@ processar_dimensao_social <- function(
 
   if (ano == 2000L) {
 
-    stop(
-      "O adaptador 2000 ainda nao foi migrado para a nova ",
-      "arquitetura de execucao por dimensao + ano. ",
-      "A interrupcao e intencional para impedir uma leitura ",
-      "censitaria nao controlada."
+    return(
+      processar_social_2000(
+        executar_soc03 = executar_soc03,
+        executar_eb = executar_eb,
+        forcar_recalculo = forcar_recalculo
+      )
     )
   }
 
