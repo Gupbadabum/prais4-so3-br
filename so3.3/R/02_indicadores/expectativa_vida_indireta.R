@@ -2112,3 +2112,541 @@ sintetizar_q5_estrela <- function(
     resultado[]
   )
 }
+
+# ============================================================
+# 7. CAMINHO OPERACIONAL - q(5)_EB -> e0
+#    COALE-DEMENY WEST
+# ============================================================
+#
+# Converte q(5) estabilizado por Empirical Bayes em
+# expectativa de vida ao nascer (e0) pela familia West.
+#
+# Para q5 entre niveis adjacentes j e j+1:
+#
+#              q5 - q5_j
+#   h = -------------------------
+#         q5_(j+1) - q5_j
+#
+#   e0 = (1 - h) * e0_j + h * e0_(j+1)
+#
+# Nao ha extrapolacao para fora do dominio West.
+# Como q5 e e0 possuem relacao inversa:
+#
+#   q5_ic_inf -> e0_ic_sup
+#   q5_ic_sup -> e0_ic_inf
+#
+# A referencia temporal permanece ano_referencia_q5.
+# ============================================================
+
+.converter_um_q5_para_e0_west <- function(
+  q5,
+  grupo_dvi,
+  referencia_west,
+  tolerancia = 1e-12
+) {
+
+  retorno <- list(
+    e0 = NA_real_,
+    nivel_west_equivalente = NA_real_,
+    nivel_j = NA_integer_,
+    nivel_j1 = NA_integer_,
+    h_west = NA_real_,
+    flag_e0 = NA_character_
+  )
+
+  if (
+    length(q5) != 1L ||
+    is.na(q5) ||
+    !is.finite(q5)
+  ) {
+    retorno$flag_e0 <- "q5_ausente"
+    return(retorno)
+  }
+
+  if (q5 < 0 || q5 > 1) {
+    retorno$flag_e0 <- "q5_fora_0_1"
+    return(retorno)
+  }
+
+  if (
+    !grupo_dvi %in%
+      c("Total", "Masculino", "Feminino")
+  ) {
+    retorno$flag_e0 <- "grupo_invalido"
+    return(retorno)
+  }
+
+  tabela <- data.table::copy(
+    referencia_west[
+      grupo == grupo_dvi
+    ]
+  )
+
+  if (nrow(tabela) == 0L) {
+    retorno$flag_e0 <- "grupo_sem_tabela_west"
+    return(retorno)
+  }
+
+  data.table::setorder(
+    tabela,
+    nivel
+  )
+
+  q_modelo <- tabela$q5
+
+  q_min <- min(q_modelo, na.rm = TRUE)
+  q_max <- max(q_modelo, na.rm = TRUE)
+
+  if (
+    q5 < q_min - tolerancia ||
+    q5 > q_max + tolerancia
+  ) {
+    retorno$flag_e0 <- "fora_dominio_west"
+    return(retorno)
+  }
+
+  indice_exato <- which(
+    abs(q_modelo - q5) <= tolerancia
+  )
+
+  if (length(indice_exato) > 0L) {
+
+    i <- indice_exato[1L]
+
+    retorno$e0 <- as.numeric(tabela$e0[i])
+    retorno$nivel_west_equivalente <-
+      as.numeric(tabela$nivel[i])
+    retorno$nivel_j <-
+      as.integer(tabela$nivel[i])
+    retorno$nivel_j1 <-
+      as.integer(tabela$nivel[i])
+    retorno$h_west <- 0
+    retorno$flag_e0 <- "ok"
+
+    return(retorno)
+  }
+
+  candidatos_j <- which(
+    q_modelo > q5
+  )
+
+  candidatos_j1 <- which(
+    q_modelo < q5
+  )
+
+  if (
+    length(candidatos_j) == 0L ||
+    length(candidatos_j1) == 0L
+  ) {
+    retorno$flag_e0 <- "sem_intervalo_west"
+    return(retorno)
+  }
+
+  i_j <- max(candidatos_j)
+  i_j1 <- min(candidatos_j1)
+
+  retorno$nivel_j <-
+    as.integer(tabela$nivel[i_j])
+  retorno$nivel_j1 <-
+    as.integer(tabela$nivel[i_j1])
+
+  if (i_j1 != i_j + 1L) {
+    retorno$flag_e0 <- "intervalo_west_nao_adjacente"
+    return(retorno)
+  }
+
+  q_j <- q_modelo[i_j]
+  q_j1 <- q_modelo[i_j1]
+
+  h <- (
+    q5 - q_j
+  ) / (
+    q_j1 - q_j
+  )
+
+  retorno$h_west <- as.numeric(h)
+
+  if (
+    !is.finite(h) ||
+    h < -tolerancia ||
+    h > 1 + tolerancia
+  ) {
+    retorno$flag_e0 <- "interpolacao_invalida"
+    return(retorno)
+  }
+
+  retorno$e0 <- as.numeric(
+    (1 - h) * tabela$e0[i_j] +
+      h * tabela$e0[i_j1]
+  )
+
+  retorno$nivel_west_equivalente <- as.numeric(
+    (1 - h) * tabela$nivel[i_j] +
+      h * tabela$nivel[i_j1]
+  )
+
+  retorno$flag_e0 <- "ok"
+
+  retorno
+}
+
+
+converter_q5_eb_para_e0_west <- function(
+  q5_eb,
+  referencia_west,
+  tolerancia = 1e-12
+) {
+
+  colunas_necessarias <- c(
+    "ano",
+    "uf",
+    "cod_mun",
+    "grupo",
+    "q5_estabilizado",
+    "q5_ic_inf",
+    "q5_ic_sup",
+    "t_usado",
+    "ano_referencia_q5"
+  )
+
+  faltantes <- setdiff(
+    colunas_necessarias,
+    names(q5_eb)
+  )
+
+  if (length(faltantes) > 0L) {
+    stop(
+      "Colunas ausentes em q5_eb: ",
+      paste(faltantes, collapse = ", ")
+    )
+  }
+
+  referencia <- data.table::as.data.table(
+    data.table::copy(
+      referencia_west
+    )
+  )
+
+  colunas_west <- c(
+    "grupo",
+    "nivel",
+    "e0",
+    "q5"
+  )
+
+  faltantes_west <- setdiff(
+    colunas_west,
+    names(referencia)
+  )
+
+  if (length(faltantes_west) > 0L) {
+    stop(
+      "Colunas ausentes na referencia West: ",
+      paste(faltantes_west, collapse = ", ")
+    )
+  }
+
+  grupos_esperados <- c(
+    "Total",
+    "Masculino",
+    "Feminino"
+  )
+
+  if (
+    !setequal(
+      unique(referencia$grupo),
+      grupos_esperados
+    )
+  ) {
+    stop(
+      "A referencia West deve conter exatamente ",
+      "Total, Masculino e Feminino."
+    )
+  }
+
+  duplicidades_west <- referencia[
+    ,
+    .N,
+    by = .(grupo, nivel)
+  ][
+    N > 1L
+  ]
+
+  if (nrow(duplicidades_west) > 0L) {
+    stop(
+      "Foram encontradas duplicidades na referencia West."
+    )
+  }
+
+  qa_west <- referencia[
+    order(nivel),
+    .(
+      n_niveis = data.table::uniqueN(nivel),
+      q5_decrescente = all(diff(q5) < 0),
+      e0_crescente = all(diff(e0) > 0)
+    ),
+    by = grupo
+  ]
+
+  if (
+    any(
+      qa_west$n_niveis != 25L |
+      !qa_west$q5_decrescente |
+      !qa_west$e0_crescente
+    )
+  ) {
+    stop(
+      "A referencia West nao apresenta a estrutura ",
+      "monotonica esperada para q5 e e0."
+    )
+  }
+
+  dados <- data.table::as.data.table(
+    data.table::copy(
+      q5_eb
+    )
+  )
+
+  duplicidades <- dados[
+    ,
+    .N,
+    by = .(ano, uf, cod_mun, grupo)
+  ][
+    N > 1L
+  ]
+
+  if (nrow(duplicidades) > 0L) {
+    stop(
+      "Foram encontradas duplicidades em q5_eb."
+    )
+  }
+
+  converter_vetor <- function(q) {
+    Map(
+      function(valor, grupo_atual) {
+        .converter_um_q5_para_e0_west(
+          q5 = valor,
+          grupo_dvi = grupo_atual,
+          referencia_west = referencia,
+          tolerancia = tolerancia
+        )
+      },
+      q,
+      dados$grupo
+    )
+  }
+
+  ponto <- converter_vetor(
+    dados$q5_estabilizado
+  )
+
+  lim_q5_inf <- converter_vetor(
+    dados$q5_ic_inf
+  )
+
+  lim_q5_sup <- converter_vetor(
+    dados$q5_ic_sup
+  )
+
+  data.table::set(
+    dados,
+    j = "e0",
+    value = vapply(
+      ponto,
+      function(x) x$e0,
+      numeric(1)
+    )
+  )
+
+  data.table::set(
+    dados,
+    j = "nivel_west_equivalente",
+    value = vapply(
+      ponto,
+      function(x) x$nivel_west_equivalente,
+      numeric(1)
+    )
+  )
+
+  data.table::set(
+    dados,
+    j = "nivel_west_j",
+    value = vapply(
+      ponto,
+      function(x) x$nivel_j,
+      integer(1)
+    )
+  )
+
+  data.table::set(
+    dados,
+    j = "nivel_west_j1",
+    value = vapply(
+      ponto,
+      function(x) x$nivel_j1,
+      integer(1)
+    )
+  )
+
+  data.table::set(
+    dados,
+    j = "h_west",
+    value = vapply(
+      ponto,
+      function(x) x$h_west,
+      numeric(1)
+    )
+  )
+
+  data.table::set(
+    dados,
+    j = "flag_e0",
+    value = vapply(
+      ponto,
+      function(x) x$flag_e0,
+      character(1)
+    )
+  )
+
+  data.table::set(
+    dados,
+    j = "e0_ic_inf",
+    value = vapply(
+      lim_q5_sup,
+      function(x) x$e0,
+      numeric(1)
+    )
+  )
+
+  data.table::set(
+    dados,
+    j = "e0_ic_sup",
+    value = vapply(
+      lim_q5_inf,
+      function(x) x$e0,
+      numeric(1)
+    )
+  )
+
+  data.table::set(
+    dados,
+    j = "flag_e0_ic_inf",
+    value = vapply(
+      lim_q5_sup,
+      function(x) x$flag_e0,
+      character(1)
+    )
+  )
+
+  data.table::set(
+    dados,
+    j = "flag_e0_ic_sup",
+    value = vapply(
+      lim_q5_inf,
+      function(x) x$flag_e0,
+      character(1)
+    )
+  )
+
+  flag_ordem_ic_q5 <- data.table::fcase(
+    is.na(dados$q5_ic_inf) |
+      !is.finite(dados$q5_ic_inf) |
+      is.na(dados$q5_ic_sup) |
+      !is.finite(dados$q5_ic_sup),
+    "ic_q5_ausente",
+
+    dados$q5_ic_inf >
+      dados$q5_estabilizado + tolerancia |
+      dados$q5_estabilizado >
+        dados$q5_ic_sup + tolerancia,
+    "ic_q5_ordem_invalida",
+
+    default = "ok"
+  )
+
+  data.table::set(
+    dados,
+    j = "flag_ordem_ic_q5",
+    value = flag_ordem_ic_q5
+  )
+
+  flag_e0_intervalo <- data.table::fcase(
+    dados$flag_ordem_ic_q5 != "ok",
+    dados$flag_ordem_ic_q5,
+
+    dados$flag_e0_ic_inf != "ok",
+    paste0(
+      "limite_inferior_",
+      dados$flag_e0_ic_inf
+    ),
+
+    dados$flag_e0_ic_sup != "ok",
+    paste0(
+      "limite_superior_",
+      dados$flag_e0_ic_sup
+    ),
+
+    default = "ok"
+  )
+
+  data.table::set(
+    dados,
+    j = "flag_e0_intervalo",
+    value = flag_e0_intervalo
+  )
+
+  idx_intervalo_invalido <-
+    dados$flag_e0_intervalo != "ok"
+
+  dados$e0_ic_inf[
+    idx_intervalo_invalido
+  ] <- NA_real_
+
+  dados$e0_ic_sup[
+    idx_intervalo_invalido
+  ] <- NA_real_
+
+  data.table::set(
+    dados,
+    j = "amplitude_e0_ic",
+    value = data.table::fifelse(
+      is.finite(dados$e0_ic_inf) &
+        is.finite(dados$e0_ic_sup),
+      dados$e0_ic_sup - dados$e0_ic_inf,
+      NA_real_
+    )
+  )
+
+  linhas_ic_validas <-
+    dados$flag_e0 == "ok" &
+    dados$flag_e0_intervalo == "ok" &
+    is.finite(dados$e0) &
+    is.finite(dados$e0_ic_inf) &
+    is.finite(dados$e0_ic_sup)
+
+  if (
+    any(
+      dados$e0_ic_inf[linhas_ic_validas] >
+        dados$e0[linhas_ic_validas] +
+          tolerancia |
+      dados$e0[linhas_ic_validas] >
+        dados$e0_ic_sup[linhas_ic_validas] +
+          tolerancia
+    )
+  ) {
+    stop(
+      "Inconsistencia na ordem do intervalo de e0 ",
+      "apos a conversao West."
+    )
+  }
+
+  data.table::setorder(
+    dados,
+    ano,
+    grupo,
+    uf,
+    cod_mun
+  )
+
+  dados[]
+}
