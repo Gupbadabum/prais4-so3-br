@@ -90,9 +90,11 @@ mediana_segura <- function(x) {
     return(NA_real_)
   }
 
-  median(
-    x,
-    na.rm = TRUE
+  as.numeric(
+    stats::median(
+      x,
+      na.rm = TRUE
+    )
   )
 }
 
