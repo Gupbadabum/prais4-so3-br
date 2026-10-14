@@ -110,53 +110,69 @@ carregar_rds_social <- function(
 # PRODUTOS BRUTOS INDIVIDUAIS - INDICADORES SOCIAIS DIRETOS
 # ============================================================
 
-salvar_sociais_diretos_individuais <- function(
-  social_direto,
-  ano,
-  dir_bruto,
-  forcar_recalculo = FALSE
-) {
-
+validar_sociais_diretos <- function(social_direto, ano) {
   ids <- c("SOC01_ALF15", "SOC02_RURAL", "SOC04_POP1564")
   grupos <- c("Total", "Masculino", "Feminino")
-
   if (!data.table::is.data.table(social_direto)) {
     social_direto <- data.table::as.data.table(social_direto)
   }
-
-  if (anyNA(social_direto$ano) ||
-      any(social_direto$ano != ano) ||
-      anyNA(social_direto$indicador) ||
-      any(!social_direto$indicador %in% ids) ||
-      anyNA(social_direto$grupo) ||
-      any(!social_direto$grupo %in% grupos)) {
-    stop("Base Social direta contem ano, indicador ou grupo inesperado.")
-  }
-
+  requeridas <- c("ano", "uf", "cod_mun", "grupo", "indicador",
+                 "dimensao", "valor", "numerador", "denominador", "n_amostra")
+  ausentes <- setdiff(requeridas, names(social_direto))
+  if (length(ausentes) > 0L) stop("Colunas ausentes: ", paste(ausentes, collapse=", "))
   if (nrow(social_direto) == 0L ||
-      length(unique(social_direto$indicador)) != length(ids)) {
-    stop("Base Social direta incompleta: indicadores esperados ausentes.")
+      anyNA(social_direto[, ..requeridas][, .(ano, uf, cod_mun, grupo, indicador, dimensao)]) ||
+      any(social_direto$ano != ano) ||
+      any(social_direto$dimensao != "Social") ||
+      any(!social_direto$indicador %in% ids) ||
+      any(!social_direto$grupo %in% grupos) ||
+      !setequal(unique(social_direto$indicador), ids)) {
+    stop("Base Social direta incompleta ou com identificadores inesperados.")
   }
+  if (anyDuplicated(social_direto[, .(ano, cod_mun, indicador, grupo)]) > 0L) {
+    stop("Duplicidade de municipio/indicador/grupo na base Social.")
+  }
+  if (any(!is.na(social_direto$valor) &
+          (!is.finite(social_direto$valor) |
+           social_direto$valor < 0 | social_direto$valor > 100))) {
+    stop("Valor social fora do intervalo [0,100] ou nao finito.")
+  }
+  if (anyNA(social_direto$numerador) ||
+      anyNA(social_direto$denominador) ||
+      any(social_direto$denominador <= 0) ||
+      any(social_direto$numerador < 0) ||
+      any(social_direto$numerador > social_direto$denominador + 1e-6)) {
+    stop("Numeradores ou denominadores invalidos na base Social.")
+  }
+  if (anyNA(social_direto$n_amostra) || any(social_direto$n_amostra <= 0)) {
+    stop("Tamanho amostral invalido na base Social.")
+  }
+  if (exists("diagnosticar_indicadores", mode="function", inherits=TRUE)) {
+    diag <- diagnosticar_indicadores(social_direto)
+    if (nrow(diag$duplicidades) > 0L ||
+        nrow(diag$problemas_consistencia_sexo) > 0L) {
+      stop("Diagnostico Social nao aprovado: duplicidade ou inconsistencia T/M/F.")
+    }
+  } else {
+    stop("Modulo de diagnostico_indicadores.R nao foi carregado.")
+  }
+  invisible(TRUE)
+}
 
+salvar_sociais_diretos_individuais <- function(
+  social_direto, ano, dir_bruto, forcar_recalculo = FALSE
+) {
+  validar_sociais_diretos(social_direto, ano)
+  ids <- c("SOC01_ALF15", "SOC02_RURAL", "SOC04_POP1564")
   for (id in ids) {
     d <- social_direto[indicador == id]
-    if (anyNA(d$cod_mun) ||
-        anyDuplicated(d[, .(ano, cod_mun, grupo)]) > 0L) {
-      stop("Identificacao municipal ausente ou duplicada em ", id)
-    }
-    if (any(!is.na(d$valor) & (d$valor < 0 | d$valor > 100))) {
-      stop("Valor fora do intervalo [0,100] em ", id)
-    }
-
     arq <- file.path(dir_bruto, paste0(id, "_", ano, ".rds"))
     if (!file.exists(arq) || isTRUE(forcar_recalculo)) {
       salvar_rds_social(d, arq)
     }
   }
-
   invisible(TRUE)
 }
-
 
 # ============================================================
 # 2. SOC03 - ETAPAS DEMOGRAFICAS
