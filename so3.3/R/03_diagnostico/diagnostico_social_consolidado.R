@@ -52,10 +52,6 @@ diagnosticar_social_consolidado <- function(
       municipios <- unique(d$cod_mun)
       grade <- data.table::CJ(cod_mun = municipios, grupo = grupos)
       presentes <- unique(d[, .(cod_mun, grupo)])
-      ausencias_grupo[[i]] <- merge(
-        grade, presentes,
-        by = c("cod_mun", "grupo"), all.x = TRUE
-      ) # A checagem exata da grade ocorre abaixo.
       chaves <- paste(presentes$cod_mun, presentes$grupo, sep = ":")
       grade[, ausente := !(paste(cod_mun, grupo, sep = ":") %in% chaves)]
       ausencias_grupo[[i]] <- grade[ausente == TRUE,
