@@ -147,6 +147,10 @@ if (DIMENSAO_ATIVA == "social") {
   )
 
   source(
+    "so3.3/R/03_diagnostico/diagnostico_indicadores.R"
+  )
+
+  source(
     "so3.3/R/02_indicadores/expectativa_vida_indireta.R"
   )
 
