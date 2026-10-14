@@ -153,8 +153,12 @@ preparar_delta_west_ibge <- function(
     caminho_ibge, skip=5, .name_repair="minimal"
   ))
   nomes <- names(ib)
-  padronizados <- toupper(gsub("[^A-Z0-9]", "",
-                             iconv(nomes, to="ASCII//TRANSLIT")))
+  # Converter para maiusculas ANTES de remover caracteres especiais.
+  # Caso contrario, os nomes originais "lx" e "ex" seriam apagados.
+  padronizados <- gsub(
+    "[^A-Z0-9]", "",
+    toupper(iconv(nomes, to = "ASCII//TRANSLIT"))
+  )
   requisitados <- c("SIGLA","ANO","SEXO","IDADE","LX","EX")
   if (!all(requisitados %in% padronizados)) {
     stop(
