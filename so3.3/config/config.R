@@ -99,6 +99,29 @@ DIR_REFERENCIAS_COALE_DEMENY <- file.path(
   "coale_demeny"
 )
 
+# Tabuas-modelo de vida estendidas, UN DESA (modelo UN 2011).
+# Os caminhos sao relativos a raiz do repositorio, para nao
+# depender do ponto de montagem ou do usuario da maquina.
+DIR_REFERENCIAS_UNDESA <- file.path(
+  DIR_REFERENCIAS,
+  "undesa"
+)
+
+DIR_TABUAS_VIDA_UNDESA_2011 <- file.path(
+  DIR_REFERENCIAS_UNDESA,
+  "model_life_tables_2011"
+)
+
+ARQ_UNDESA_WEST_COMPLETA <- file.path(
+  DIR_TABUAS_VIDA_UNDESA_2011,
+  "undesa_pd_2026_mlt_un2011_130_1y_complete.xlsx"
+)
+
+ARQ_UNDESA_WEST_ABREVIADA <- file.path(
+  DIR_TABUAS_VIDA_UNDESA_2011,
+  "unpd_2011_mlt_130_1y_abridged.xlsx"
+)
+
 
 # ------------------------------------------------------------
 # Tabelas de mortalidade - IBGE
