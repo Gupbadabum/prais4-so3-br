@@ -37,6 +37,7 @@ if (!requireNamespace("censobr", quietly = TRUE)) {
 # ============================================================
 
 VARIAVEIS_SOCIAL_CENSO_2000 <- c(
+  "code_muni",  # codigo municipal harmonizado pelo censobr
   "V0102",  # UF
   "V0103",  # municipio - codigo completo de 7 digitos
   "P001",   # peso
@@ -188,35 +189,8 @@ adaptar_censo_2000_uf <- function(
 
 
   # ----------------------------------------------------------
-  # Geografia
-  #
-  # No Censo 2000, V0103 foi confirmado empiricamente como
-  # codigo municipal completo de 7 digitos. Nao deve ser
-  # concatenado novamente com V0102.
+  # Geografia: identificador municipal harmonizado do censobr.
   # ----------------------------------------------------------
-
-  cod_mun_2000 <- sprintf(
-    "%07d",
-    as.integer(d$V0103)
-  )
-
-  uf_2000 <- sprintf(
-    "%02d",
-    as.integer(d$V0102)
-  )
-
-  geo_valida <-
-    is.na(d$V0103) |
-    is.na(d$V0102) |
-    substr(cod_mun_2000, 1L, 2L) == uf_2000
-
-  if (any(!geo_valida, na.rm = TRUE)) {
-    stop(
-      "Inconsistencia entre V0102 e V0103 no Censo 2000. ",
-      "V0103 deveria conter o codigo municipal completo."
-    )
-  }
-
 
   # ----------------------------------------------------------
   # Estrutura canonica
@@ -232,10 +206,7 @@ adaptar_censo_2000_uf <- function(
         as.integer(V0102)
       ),
 
-      cod_mun = sprintf(
-        "%07d",
-        as.integer(V0103)
-      ),
+      cod_mun = sprintf("%07d", as.integer(code_muni)),
 
       peso = as.numeric(
         P001
