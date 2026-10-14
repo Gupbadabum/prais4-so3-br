@@ -37,6 +37,7 @@ if (!requireNamespace("censobr", quietly = TRUE)) {
 # ============================================================
 
 VARIAVEIS_SOCIAL_CENSO_2010 <- c(
+  "code_muni",  # codigo municipal harmonizado pelo censobr
   "V0001",  # UF
   "V0002",  # municipio (5 posicoes dentro da UF)
   "V0010",  # peso amostral
@@ -208,11 +209,7 @@ adaptar_censo_2010_uf <- function(
         as.integer(V0001)
       ),
 
-      cod_mun = sprintf(
-        "%02d%05d",
-        as.integer(V0001),
-        as.integer(V0002)
-      ),
+      cod_mun = sprintf("%07d", as.integer(code_muni)),
 
       peso = as.numeric(
         V0010
