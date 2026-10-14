@@ -107,6 +107,58 @@ carregar_rds_social <- function(
 
 
 # ============================================================
+# PRODUTOS BRUTOS INDIVIDUAIS - INDICADORES SOCIAIS DIRETOS
+# ============================================================
+
+salvar_sociais_diretos_individuais <- function(
+  social_direto,
+  ano,
+  dir_bruto,
+  forcar_recalculo = FALSE
+) {
+
+  ids <- c("SOC01_ALF15", "SOC02_RURAL", "SOC04_POP1564")
+  grupos <- c("Total", "Masculino", "Feminino")
+
+  if (!data.table::is.data.table(social_direto)) {
+    social_direto <- data.table::as.data.table(social_direto)
+  }
+
+  if (anyNA(social_direto$ano) ||
+      any(social_direto$ano != ano) ||
+      anyNA(social_direto$indicador) ||
+      any(!social_direto$indicador %in% ids) ||
+      anyNA(social_direto$grupo) ||
+      any(!social_direto$grupo %in% grupos)) {
+    stop("Base Social direta contem ano, indicador ou grupo inesperado.")
+  }
+
+  if (nrow(social_direto) == 0L ||
+      length(unique(social_direto$indicador)) != length(ids)) {
+    stop("Base Social direta incompleta: indicadores esperados ausentes.")
+  }
+
+  for (id in ids) {
+    d <- social_direto[indicador == id]
+    if (anyNA(d$cod_mun) ||
+        anyDuplicated(d[, .(ano, cod_mun, grupo)]) > 0L) {
+      stop("Identificacao municipal ausente ou duplicada em ", id)
+    }
+    if (any(!is.na(d$valor) & (d$valor < 0 | d$valor > 100))) {
+      stop("Valor fora do intervalo [0,100] em ", id)
+    }
+
+    arq <- file.path(dir_bruto, paste0(id, "_", ano, ".rds"))
+    if (!file.exists(arq) || isTRUE(forcar_recalculo)) {
+      salvar_rds_social(d, arq)
+    }
+  }
+
+  invisible(TRUE)
+}
+
+
+# ============================================================
 # 2. SOC03 - ETAPAS DEMOGRAFICAS
 # ============================================================
 
@@ -604,6 +656,13 @@ processar_social_2000 <- function(
   }
 
 
+  salvar_sociais_diretos_individuais(
+    social_direto = social_direto,
+    ano = as.integer(unique(social_direto$ano)),
+    dir_bruto = dirs$bruto,
+    forcar_recalculo = forcar_recalculo
+  )
+
   resultado <- list(
     direto = social_direto,
     ev0 = insumos_ev0
@@ -812,6 +871,13 @@ processar_social_2010 <- function(
     )
   }
 
+
+  salvar_sociais_diretos_individuais(
+    social_direto = social_direto,
+    ano = as.integer(unique(social_direto$ano)),
+    dir_bruto = dirs$bruto,
+    forcar_recalculo = forcar_recalculo
+  )
 
   resultado <- list(
     direto = social_direto,
@@ -1103,6 +1169,13 @@ processar_social_2022 <- function(
     )
   }
 
+
+  salvar_sociais_diretos_individuais(
+    social_direto = social_direto,
+    ano = as.integer(unique(social_direto$ano)),
+    dir_bruto = dirs$bruto,
+    forcar_recalculo = forcar_recalculo
+  )
 
   resultado <- list(
     direto = social_direto,
