@@ -203,7 +203,6 @@ preparar_delta_west_ibge <- function(
   }
 
   ref <- data.table::fread(arq_west)
-  grid <- merge(estados,ref[, .(sex,e0,q5)], by="sex",allow.cartesian=TRUE)
   # A interpolacao abaixo usa o mesmo dominio e escala que o conversor:
   # log q5 (e nao a escala linear de probabilidade).
   interp <- function(q5, sex) {
