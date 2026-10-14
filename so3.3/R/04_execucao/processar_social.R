@@ -782,54 +782,43 @@ processar_social_2010 <- function(
       )
 
 
+    dir_partes <- file.path(dirs$intermediario, "partes_censo_2010")
+    dir.create(dir_partes, recursive = TRUE, showWarnings = FALSE)
+
     for (i in seq_along(ufs)) {
-
       uf_atual <- ufs[i]
-
-      message(
-        sprintf(
-          "[%02d/%02d] Social 2010 - UF %02d",
-          i,
-          length(ufs),
-          uf_atual
-        )
+      uf_chr <- sprintf("%02d", uf_atual)
+      arq_parte_direto <- file.path(
+        dir_partes, paste0("social_direto_2010_UF", uf_chr, ".rds")
       )
-
-
-      dados_uf <-
-        coletar_uf_censo_2010(
-          censo_arrow,
-          uf_atual
-        )
-
-
-      dados_uf <-
-        adaptar_censo_2010_uf(
-          dados_uf
-        )
-
-
-      resultados_direto[[i]] <-
-        calcular_social_direto(
-          dados_uf
-        )
-
-
-      resultados_ev0[[i]] <-
-        preparar_insumos_soc03_ev0(
-          dados_uf
-        )
-
-
-      rm(
-        dados_uf
+      arq_parte_ev0 <- file.path(
+        dir_partes, paste0("insumos_ev0_2010_UF", uf_chr, ".rds")
       )
+      parte_completa <- file.exists(arq_parte_direto) &&
+        file.exists(arq_parte_ev0) && !isTRUE(forcar_recalculo)
 
-      invisible(
-        gc()
-      )
+      if (parte_completa) {
+        message(sprintf("[%02d/%02d] Social 2010 - UF %s | checkpoint",
+                        i, length(ufs), uf_chr))
+        resultados_direto[[i]] <- carregar_rds_social(arq_parte_direto)
+        resultados_ev0[[i]] <- carregar_rds_social(arq_parte_ev0)
+      } else {
+        message(sprintf("[%02d/%02d] Social 2010 - UF %s | processamento",
+                        i, length(ufs), uf_chr))
+        dados_uf <- coletar_uf_censo_2010(censo_arrow, uf_atual)
+        dados_uf <- adaptar_censo_2010_uf(dados_uf)
+        direto_uf <- calcular_social_direto(dados_uf)
+        ev0_uf <- preparar_insumos_soc03_ev0(dados_uf)
+
+        salvar_rds_social(direto_uf, arq_parte_direto)
+        salvar_rds_social(ev0_uf, arq_parte_ev0)
+        resultados_direto[[i]] <- direto_uf
+        resultados_ev0[[i]] <- ev0_uf
+
+        rm(dados_uf, direto_uf, ev0_uf)
+        invisible(gc())
+      }
     }
-
 
     social_direto <-
       data.table::rbindlist(
