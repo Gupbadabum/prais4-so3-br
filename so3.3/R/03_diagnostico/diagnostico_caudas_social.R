@@ -156,12 +156,12 @@ diagnosticar_caudas_sociais <- function(
   saveRDS(resumo, file.path(dir_saida, "resumo_caudas_5pct.rds"))
   saveRDS(selecionados, file.path(dir_saida, "municipios_caudas_5pct.rds"))
 
-  cat("\\n=== CAUDAS SOCIAIS: SELECAO PARA INVESTIGACAO ===\\n")
+  cat("\n=== CAUDAS SOCIAIS: SELECAO PARA INVESTIGACAO ===\n")
   print(resumo)
-  cat("\\nEmpates nos limites podem elevar a proporcao selecionada.\\n")
-  cat("Nenhum indicador bruto foi alterado.\\n")
-  cat("Resumo: ", arquivo_resumo, "\\n", sep = "")
-  cat("Municipios: ", arquivo_detalhe, "\\n", sep = "")
+  cat("\nEmpates nos limites podem elevar a proporcao selecionada.\n")
+  cat("Nenhum indicador bruto foi alterado.\n")
+  cat("Resumo: ", arquivo_resumo, "\n", sep = "")
+  cat("Municipios: ", arquivo_detalhe, "\n", sep = "")
 
   invisible(list(resumo = resumo, municipios = selecionados))
 }
