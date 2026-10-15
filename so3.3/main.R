@@ -156,30 +156,32 @@ if (DIMENSAO_ATIVA == "social") {
 
 
   # ----------------------------------------------------------
-  # Estabilizacao q(5) EB
-  #
-  # O arquivo pode existir apenas na arvore local durante a
-  # transicao. Quando presente, ele e carregado e o executor
-  # produz automaticamente os checkpoints do EB.
+  # Dependencias obrigatorias para o SOC03 completo
   # ----------------------------------------------------------
 
   ARQ_ESTABILIZACAO_Q5_EB <-
     "so3.3/R/02_indicadores/estabilizacao_q5_eb.R"
 
-  if (file.exists(ARQ_ESTABILIZACAO_Q5_EB)) {
-
-    source(
+  if (!file.exists(ARQ_ESTABILIZACAO_Q5_EB)) {
+    stop(
+      "SOC03: modulo de estabilizacao EB ausente: ",
       ARQ_ESTABILIZACAO_Q5_EB
     )
-
-  } else {
-
-    warning(
-      "Arquivo de estabilizacao q(5) EB nao encontrado. ",
-      "A execucao seguira ate Brass-Trussell e preservara ",
-      "os checkpoints disponiveis."
-    )
   }
+
+  source(ARQ_ESTABILIZACAO_Q5_EB)
+
+  source(
+    "so3.3/R/02_indicadores/preparar_referencias_soc03.R"
+  )
+
+  source(
+    "so3.3/R/02_indicadores/converter_soc03_ev0.R"
+  )
+
+  source(
+    "so3.3/R/05_exportacao/exportar_resultados_csv.R"
+  )
 
 
   # ----------------------------------------------------------
@@ -214,6 +216,10 @@ if (DIMENSAO_ATIVA == "social") {
   )
 
 
+  # ----------------------------------------------------------
+  # 1. Insumos censitarios + SOC01, SOC02, SOC04 + Brass/EB
+  # ----------------------------------------------------------
+
   resultado_execucao <-
     processar_dimensao_social(
       ano = ANO_ATIVO,
@@ -222,11 +228,44 @@ if (DIMENSAO_ATIVA == "social") {
       forcar_recalculo = FORCAR_RECALCULO
     )
 
+  # ----------------------------------------------------------
+  # 2. Referencias West/IBGE (reutilizadas quando atualizadas)
+  # ----------------------------------------------------------
+
+  message("SOC03 | Preparando referencias West/IBGE...")
+  preparar_referencias_soc03(forcar = FALSE)
+
+  # ----------------------------------------------------------
+  # 3. Conversao municipal final q(5) EB -> e0 (T/M/F)
+  #
+  # Sem fallback: uma etapa ausente ou invalida interrompe
+  # a execucao, em vez de concluir uma Social incompleta.
+  # ----------------------------------------------------------
+
+  message("SOC03 | Produzindo expectativa de vida municipal...")
+  produzir_soc03_ev0(
+    ano = ANO_ATIVO,
+    dir_intermediario = DIR_OUTPUT_INTERMEDIARIO,
+    dir_bruto = DIR_OUTPUT_BRUTO,
+    forcar = FORCAR_RECALCULO
+  )
+
+  # ----------------------------------------------------------
+  # 4. CSVs dos quatro indicadores (inclui nomes IBGE 2025)
+  # ----------------------------------------------------------
+
+  message("Social | Exportando indicadores municipais em CSV...")
+  resultado_exportacao <-
+    exportar_social_bruto_csv(
+      ano = ANO_ATIVO,
+      dir_bruto = DIR_OUTPUT_BRUTO,
+      sobrescrever = FORCAR_RECALCULO
+    )
 
   message(
-    "Execucao concluida: Social ",
+    "Execucao integral concluida: Social ",
     ANO_ATIVO,
-    "."
+    " (SOC01, SOC02, SOC03, SOC04 e CSVs)."
   )
 }
 
