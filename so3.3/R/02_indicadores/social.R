@@ -566,6 +566,10 @@ classificar_idade_mae_ev0 <- function(idade) {
 # Agregacao para um grupo de sexo dos filhos
 # ------------------------------------------------------------
 
+# ------------------------------------------------------------
+# Agregacao para um grupo de sexo dos filhos
+# ------------------------------------------------------------
+
 agregar_ev0_grupo <- function(
     dt,
     grupo_nome,
@@ -576,6 +580,24 @@ agregar_ev0_grupo <- function(
   d <- data.table::copy(
     dt
   )
+
+
+  # ----------------------------------------------------------
+  # Variaveis de filhos correspondentes ao grupo
+  #
+  # Estas variaveis permanecem em escala individual:
+  #
+  #   filhos_nv
+  #       filhos nascidos vivos declarados pela mulher
+  #
+  #   filhos_vivos
+  #       filhos ainda vivos declarados pela mulher
+  #
+  # A partir delas serao preservadas duas representacoes:
+  #
+  #   1. contagens observadas na amostra (raw)
+  #   2. totais expandidos pelos pesos amostrais
+  # ----------------------------------------------------------
 
   d[
     ,
@@ -591,14 +613,36 @@ agregar_ev0_grupo <- function(
   ]
 
 
-  # Mantem apenas observacoes com informacao suficiente
-  # para o calculo demografico.
+  # ----------------------------------------------------------
+  # Universo com informacao suficiente
+  #
+  # A mesma regra e aplicada tanto as contagens observadas
+  # quanto aos totais ponderados.
+  #
+  # Portanto, raw e ponderado descrevem exatamente o mesmo
+  # conjunto de mulheres.
+  # ----------------------------------------------------------
 
   d <- d[
     !is.na(filhos_nv) &
       !is.na(filhos_vivos)
   ]
 
+
+  # ----------------------------------------------------------
+  # Agregacao municipal
+  #
+  # IMPORTANTE:
+  #
+  # filhos_*_raw
+  #     soma direta dos valores declarados pelas mulheres
+  #     presentes na amostra, sem uso dos pesos.
+  #
+  # filhos_*
+  #     estimativas expandidas utilizando o peso amostral.
+  #
+  # Nenhuma das duas representacoes substitui a outra.
+  # ----------------------------------------------------------
 
   resultado <- d[
     ,
@@ -614,6 +658,24 @@ agregar_ev0_grupo <- function(
         peso^2,
         na.rm = TRUE
       ),
+
+      # ------------------------------------------------------
+      # Contagens observadas na amostra
+      # ------------------------------------------------------
+
+      filhos_nv_raw = sum(
+        filhos_nv,
+        na.rm = TRUE
+      ),
+
+      filhos_vivos_raw = sum(
+        filhos_vivos,
+        na.rm = TRUE
+      ),
+
+      # ------------------------------------------------------
+      # Totais expandidos
+      # ------------------------------------------------------
 
       filhos_nv = sum(
         peso * filhos_nv,
@@ -634,6 +696,10 @@ agregar_ev0_grupo <- function(
   ]
 
 
+  # ----------------------------------------------------------
+  # Quantidades derivadas
+  # ----------------------------------------------------------
+
   resultado[
     ,
     `:=`(
@@ -649,9 +715,29 @@ agregar_ev0_grupo <- function(
           NA_real_
         ),
 
+      # ------------------------------------------------------
+      # Obitos observados na amostra
+      #
+      # Esta e a quantidade que futuramente permitira
+      # distinguir zero realmente observado de zero produzido
+      # por alguma aproximacao de contagem efetiva.
+      # ------------------------------------------------------
+
+      filhos_falecidos_raw =
+        filhos_nv_raw -
+        filhos_vivos_raw,
+
+      # ------------------------------------------------------
+      # Obitos expandidos
+      # ------------------------------------------------------
+
       filhos_falecidos =
         filhos_nv -
         filhos_vivos,
+
+      # ------------------------------------------------------
+      # Proporcao ponderada utilizada pelo Brass-Trussell
+      # ------------------------------------------------------
 
       proporcao_falecidos =
         data.table::fifelse(
@@ -669,6 +755,10 @@ agregar_ev0_grupo <- function(
   ]
 
 
+  # ----------------------------------------------------------
+  # Saida canonica da etapa EV0
+  # ----------------------------------------------------------
+
   resultado[
     ,
     .(
@@ -682,6 +772,10 @@ agregar_ev0_grupo <- function(
       n_efetivo,
       soma_pesos,
 
+      filhos_nv_raw,
+      filhos_vivos_raw,
+      filhos_falecidos_raw,
+
       filhos_nv,
       filhos_vivos,
       filhos_falecidos,
@@ -689,7 +783,6 @@ agregar_ev0_grupo <- function(
     )
   ]
 }
-
 
 # ------------------------------------------------------------
 # Preparacao completa dos insumos

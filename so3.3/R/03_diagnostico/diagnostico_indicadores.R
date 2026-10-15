@@ -51,10 +51,10 @@ min_seguro <- function(x) {
     return(NA_real_)
   }
 
-  min(
+  as.numeric(min(
     x,
     na.rm = TRUE
-  )
+  ))
 }
 
 
@@ -64,10 +64,10 @@ max_seguro <- function(x) {
     return(NA_real_)
   }
 
-  max(
+  as.numeric(max(
     x,
     na.rm = TRUE
-  )
+  ))
 }
 
 
@@ -90,9 +90,11 @@ mediana_segura <- function(x) {
     return(NA_real_)
   }
 
-  median(
-    x,
-    na.rm = TRUE
+  as.numeric(
+    stats::median(
+      x,
+      na.rm = TRUE
+    )
   )
 }
 

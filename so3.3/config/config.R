@@ -9,9 +9,6 @@
 #
 # ============================================================
 
-# ============================================================
-# ARQUIVO: config/config.R
-# ============================================================
 
 # ------------------------------------------------------------
 # Recortes temporais do DVI
@@ -32,6 +29,17 @@ GRUPOS_DVI <- c(
   "Total",
   "Masculino",
   "Feminino"
+)
+
+
+# ------------------------------------------------------------
+# Dimensoes operacionais
+# ------------------------------------------------------------
+
+DIMENSOES_DVI <- c(
+  "social",
+  "economica",
+  "infraestrutural"
 )
 
 
@@ -66,12 +74,9 @@ DIR_DOCS <- file.path(
   "docs"
 )
 
+
 # ------------------------------------------------------------
 # Insumos versionados
-#
-# Diferentemente de so3.3/data/, estes arquivos fazem parte
-# do repositorio por serem fontes de referencia necessarias
-# para a reproducao metodologica.
 # ------------------------------------------------------------
 
 DIR_INPUTS <- file.path(
@@ -94,10 +99,33 @@ DIR_REFERENCIAS_COALE_DEMENY <- file.path(
   "coale_demeny"
 )
 
+# Tabuas-modelo de vida estendidas, UN DESA (modelo UN 2011).
+# Os caminhos sao relativos a raiz do repositorio, para nao
+# depender do ponto de montagem ou do usuario da maquina.
+DIR_REFERENCIAS_UNDESA <- file.path(
+  DIR_REFERENCIAS,
+  "undesa"
+)
+
+DIR_TABUAS_VIDA_UNDESA_2011 <- file.path(
+  DIR_REFERENCIAS_UNDESA,
+  "model_life_tables_2011"
+)
+
+ARQ_UNDESA_WEST_COMPLETA <- file.path(
+  DIR_TABUAS_VIDA_UNDESA_2011,
+  "undesa_pd_2026_mlt_un2011_130_1y_complete.xlsx"
+)
+
+ARQ_UNDESA_WEST_ABREVIADA <- file.path(
+  DIR_TABUAS_VIDA_UNDESA_2011,
+  "unpd_2011_mlt_130_1y_abridged.xlsx"
+)
+
+
 # ------------------------------------------------------------
 # Tabelas de mortalidade - IBGE
 # Projecoes da Populacao, Revisao 2024
-# Brasil, Grandes Regioes e UFs - 2000/2070
 # ------------------------------------------------------------
 
 ARQ_TABUAS_MORTALIDADE_IBGE <- file.path(
@@ -105,11 +133,9 @@ ARQ_TABUAS_MORTALIDADE_IBGE <- file.path(
   "projecoes_2024_tab5_tabuas_mortalidade.xlsx"
 )
 
+
 # ------------------------------------------------------------
 # Tabuas-modelo Coale-Demeny - familia West
-#
-# Referencia utilizada para harmonizar q2, q3 e q5
-# estimados pelo metodo Brass-Trussell.
 # ------------------------------------------------------------
 
 ARQ_COALE_DEMENY_WEST <- file.path(
@@ -117,13 +143,32 @@ ARQ_COALE_DEMENY_WEST <- file.path(
   "coale_demeny_west_qx.csv"
 )
 
+
 # ------------------------------------------------------------
 # Subdiretorios de resultados
+#
+# bruto:
+#   indicadores municipais antes do tratamento estatistico.
+#
+# intermediario:
+#   objetos necessarios para auditoria/reproducao de etapas
+#   metodologicas, mas que nao constituem o indicador final.
+#
+# tratado:
+#   resultados apos winsorizacao / Box-Cox.
+#
+# normalizado:
+#   indicadores apos normalizacao PRAIS.
 # ------------------------------------------------------------
 
 DIR_OUTPUT_BRUTO <- file.path(
   DIR_OUTPUTS,
   "bruto"
+)
+
+DIR_OUTPUT_INTERMEDIARIO <- file.path(
+  DIR_OUTPUTS,
+  "intermediario"
 )
 
 DIR_OUTPUT_TRATADO <- file.path(
@@ -154,6 +199,7 @@ DIR_OUTPUT_DVI <- file.path(
 dirs_saida <- c(
   DIR_OUTPUTS,
   DIR_OUTPUT_BRUTO,
+  DIR_OUTPUT_INTERMEDIARIO,
   DIR_OUTPUT_TRATADO,
   DIR_OUTPUT_NORMALIZADO,
   DIR_OUTPUT_COMPONENTES,
