@@ -79,7 +79,13 @@ so3.3/config/config_local.R
 # Microdados / dados brutos locais
 so3.3/data/
 
-# Resultados intermediarios / checkpoints locais do SO3.3
-# Produtos finais auditaveis permanecem versionaveis:
-# bruto, tratado, normalizado, componentes e dvi.
-so3.3/outputs/intermediario/
+# Resultados de trabalho locais (RDS, checkpoints, diagnosticos).
+# Apenas os CSVs municipais aprovados das cinco categorias
+# de produto podem ser versionados explicitamente.
+so3.3/outputs/**/*
+!so3.3/outputs/**/
+!so3.3/outputs/bruto/**/*.csv
+!so3.3/outputs/tratado/**/*.csv
+!so3.3/outputs/normalizado/**/*.csv
+!so3.3/outputs/componentes/**/*.csv
+!so3.3/outputs/dvi/**/*.csv
