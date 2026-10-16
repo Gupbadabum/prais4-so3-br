@@ -133,6 +133,13 @@ ARQ_TABUAS_MORTALIDADE_IBGE <- file.path(
   "projecoes_2024_tab5_tabuas_mortalidade.xlsx"
 )
 
+# IPCA - SIDRA 1737; serie original utilizada pelo ECO01.
+# Arquivo fonte versionado separadamente dos derivados economicos.
+ARQ_IPCA_1737 <- file.path(
+  DIR_REFERENCIAS_IBGE,
+  "tabela_1737_IPCA_para_uso.xlsx"
+)
+
 
 # ------------------------------------------------------------
 # Tabuas-modelo Coale-Demeny - familia West
