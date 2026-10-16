@@ -66,7 +66,6 @@ abrir_censo_2000_social <- function(
     year = 2000,
     columns = VARIAVEIS_SOCIAL_CENSO_2000,
     as_data_frame = FALSE,
-    merge_households = FALSE,
     showProgress = showProgress
   )
 }
