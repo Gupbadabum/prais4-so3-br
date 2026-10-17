@@ -58,9 +58,9 @@ listar_ufs_censo_2000_economica <- function(censo_arrow) {
 
   ufs_p <- sort(as.integer(ufs_p$V0102))
   ufs_d <- sort(as.integer(ufs_d$V0102))
-  ufs_esperadas <- sort(c(
+  ufs_esperadas <- sort(as.integer(c(
     11:17, 21:29, 31:33, 35, 41:43, 50:53
-  ))
+  )))
 
   if (length(ufs_p) != 27L || length(ufs_d) != 27L ||
       anyNA(ufs_p) || anyNA(ufs_d) ||
