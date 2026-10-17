@@ -276,9 +276,86 @@ if (DIMENSAO_ATIVA == "social") {
 
 if (DIMENSAO_ATIVA == "economica") {
 
-  stop(
-    "A dimensao Economica ainda nao foi migrada para o ",
-    "dispatcher por dimensao + ano."
+  # ECO01 implementado. ECO02 e ECO03 ainda nao integram
+  # o dispatcher economico.
+  source(
+    "so3.3/R/02_indicadores/preparar_referencias_eco01.R"
+  )
+  source(
+    "so3.3/R/02_indicadores/eco01_pobreza.R"
+  )
+  source(
+    "so3.3/R/05_exportacao/exportar_resultados_csv.R"
+  )
+
+  # Um adaptador e um processador por recorte censitario.
+  if (ANO_ATIVO == 2000L) {
+    source("so3.3/R/01_leitura/adaptar_censo_2000_economica.R")
+    source("so3.3/R/04_execucao/processar_eco01_2000.R")
+
+    resultado_execucao <- processar_eco01_2000(
+      forcar_recalculo = FORCAR_RECALCULO
+    )
+  }
+
+  if (ANO_ATIVO == 2010L) {
+    source("so3.3/R/01_leitura/adaptar_censo_2010_economica.R")
+    source("so3.3/R/04_execucao/processar_eco01_2010.R")
+
+    resultado_execucao <- processar_eco01_2010(
+      forcar_recalculo = FORCAR_RECALCULO
+    )
+  }
+
+  if (ANO_ATIVO == 2022L) {
+    source("so3.3/R/01_leitura/adaptar_censo_2022_economica.R")
+    source("so3.3/R/04_execucao/processar_eco01_2022.R")
+
+    resultado_execucao <- processar_eco01_2022(
+      forcar_recalculo = FORCAR_RECALCULO
+    )
+  }
+
+  if (!isTRUE(resultado_execucao$integral)) {
+    stop("ECO01: processamento nacional incompleto; CSV nao sera gerado.")
+  }
+
+  # Rele o produto nacional RDS e sua auditoria, valida
+  # municipio/grupo, e confere a leitura do CSV produzido.
+  # Um CSV existente so e reutilizado se for identico ao RDS.
+  resultado_exportacao <- exportar_eco01_bruto_csv(
+    ano = ANO_ATIVO,
+    dir_bruto = DIR_OUTPUT_BRUTO,
+    dir_intermediario = DIR_OUTPUT_INTERMEDIARIO
+  )
+
+  resultado_validacao_eco01 <- NULL
+  arquivos_csv_eco01 <- file.path(
+    DIR_OUTPUT_BRUTO,
+    "economica",
+    as.character(ANOS_DVI),
+    paste0("ECO01_POV3_PPC21_", ANOS_DVI, ".csv")
+  )
+
+  if (all(file.exists(arquivos_csv_eco01))) {
+    message("ECO01 | Conferindo conjuntamente 2000, 2010 e 2022...")
+    resultado_validacao_eco01 <- validar_eco01_tres_recortes_csv(
+      dir_bruto = DIR_OUTPUT_BRUTO,
+      dir_intermediario = DIR_OUTPUT_INTERMEDIARIO
+    )
+    message("ECO01 | Integracao dos tres recortes validada.")
+  } else {
+    message(
+      "ECO01 | Validacao conjunta pendente. CSVs ainda ausentes: ",
+      paste(basename(arquivos_csv_eco01[
+        !file.exists(arquivos_csv_eco01)
+      ]), collapse = ", ")
+    )
+  }
+
+  message(
+    "Execucao concluida: Economica ", ANO_ATIVO,
+    " (somente ECO01_POV3_PPC21 e CSV bruto)."
   )
 }
 
