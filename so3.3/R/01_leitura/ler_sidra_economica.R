@@ -117,10 +117,14 @@ if (!requireNamespace("data.table", quietly = TRUE)) {
                                     paste(tipo, anos[[j]]))
       unidade <- trimws(d[[coluna_valor + 1L]])
       disponivel <- !is.na(valores$valor)
-      if (any(disponivel & unidade != "Mil Reais") ||
-          any(!disponivel & nzchar(unidade))) {
-        stop("SIDRA economica: unidade diferente de Mil Reais em ",
-             tipo, "/", anos[[j]])
+      if (
+        any(disponivel & unidade != "Mil Reais") ||
+        any(!disponivel & !unidade %in% c("", "Mil Reais"))
+      ) {
+        stop(
+          "SIDRA economica: unidade monetaria inesperada em ",
+          tipo, "/", anos[[j]]
+        )
       }
       data.table::data.table(
         cod_mun = codigos,
