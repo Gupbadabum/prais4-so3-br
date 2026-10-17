@@ -319,11 +319,13 @@ exportar_social_bruto_csv <- function(
       any(ufs != substr(codigos, 1L, 2L))) {
     stop("ECO01 CSV: identificadores municipais invalidos em ", ano)
   }
+  tolerancia_numerica <- 1e-8
+
   if (!"cobertura_rdpc" %in% names(auditoria) ||
       anyNA(auditoria$cobertura_rdpc) ||
       any(!is.finite(auditoria$cobertura_rdpc) |
-          auditoria$cobertura_rdpc < 0 |
-          auditoria$cobertura_rdpc > 100)) {
+          auditoria$cobertura_rdpc < -tolerancia_numerica |
+          auditoria$cobertura_rdpc > 100 + tolerancia_numerica)) {
     stop("ECO01 CSV: cobertura da RDPC invalida em ", ano)
   }
 
