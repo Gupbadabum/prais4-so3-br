@@ -544,3 +544,301 @@ validar_eco01_tres_recortes_csv <- function(
     md5_fonte_ipca = fontes[[1L]]
   )
 }
+
+
+# ============================================================
+# ECO03_AGROPIB - EXPORTACAO BRUTA E CONFERENCIA DOS 3 RECORTES
+#
+# Uma linha publica por municipio, ano PRAIS e grupo T/M/F.
+# O valor de cada grupo e identico (escopo comum_municipal).
+# O ano-fonte (2002/2010/2021) fica no RDS/auditoria.
+# CSV publico: ano;uf;cod_mun;nm_mun;indicador;grupo;valor
+#
+# As fontes, os RDS e o codigo ECO03 sao verificados ANTES de
+# gravar. CSV existente divergente jamais e sobrescrito.
+# ============================================================
+
+.caminhos_eco03_csv <- function(ano, dir_bruto, dir_intermediario) {
+  ano <- .validar_ano_eco03(ano)
+  nome <- paste0("ECO03_AGROPIB_", ano)
+  list(
+    rds = file.path(
+      dir_bruto, "economica", as.character(ano), paste0(nome, ".rds")
+    ),
+    auditoria = file.path(
+      dir_intermediario, "economica", as.character(ano),
+      paste0("auditoria_eco03_", ano, ".rds")
+    ),
+    csv = file.path(
+      dir_bruto, "economica", as.character(ano), paste0(nome, ".csv")
+    )
+  )
+}
+
+.preparar_eco03_csv <- function(
+  ano, ref, dir_bruto, dir_intermediario, dir_sidra
+) {
+  dependencias <- c(
+    ".validar_ano_eco03", "validar_resultados_eco03",
+    ".ler_municipios_prais_sidra", ".assinatura_codigo_eco03"
+  )
+  faltantes <- dependencias[!vapply(
+    dependencias, exists, logical(1L),
+    mode = "function", inherits = TRUE
+  )]
+  if (length(faltantes)) {
+    stop("ECO03 CSV: carregue antes os modulos de leitura, ",
+         "diagnostico, calculo e processamento do ECO03: ",
+         paste(faltantes, collapse = ", "))
+  }
+  ano <- .validar_ano_eco03(ano)
+  caminhos <- .caminhos_eco03_csv(ano, dir_bruto, dir_intermediario)
+  if (!all(file.exists(c(caminhos$rds, caminhos$auditoria)))) {
+    stop("ECO03 CSV: RDS ou auditoria ausente para ", ano,
+         ". Nenhum CSV sera gerado.")
+  }
+  bruto <- data.table::as.data.table(readRDS(caminhos$rds))
+  auditoria_rds <- readRDS(caminhos$auditoria)
+  assinatura_salva <- attr(
+    auditoria_rds, "assinatura_codigo_eco03", exact = TRUE
+  )
+  auditoria <- data.table::as.data.table(auditoria_rds)
+  codigos_prais <- .ler_municipios_prais_sidra(ano, dir_bruto)
+  validar_resultados_eco03(bruto, auditoria, ano, codigos_prais)
+
+  assinatura_atual <- .assinatura_codigo_eco03()
+  if (is.null(assinatura_salva) ||
+      !identical(assinatura_salva, assinatura_atual)) {
+    stop("ECO03 CSV: assinatura do codigo difere da auditoria RDS em ",
+         ano, ". Nenhum produto sera sobrescrito.")
+  }
+
+  # MD5 de ambos os arquivos 5938: precisam coincidir com
+  # aqueles registrados na auditoria municipal.
+  fontes <- file.path(
+    dir_sidra, c("tabela5938.csv", "tabela5938_vab.csv")
+  )
+  if (!all(file.exists(fontes))) {
+    stop("ECO03 CSV: fonte SIDRA ausente: ",
+         paste(fontes[!file.exists(fontes)], collapse = ", "))
+  }
+  md5_atual <- unname(as.character(tools::md5sum(fontes)))
+  md5_auditoria <- c(
+    unique(as.character(auditoria$md5_tabela5938)),
+    unique(as.character(auditoria$md5_tabela5938_vab))
+  )
+  if (length(md5_auditoria) != 2L ||
+      anyNA(md5_auditoria) ||
+      !identical(md5_atual, unname(md5_auditoria))) {
+    stop("ECO03 CSV: assinaturas das fontes SIDRA divergentes em ", ano,
+         ". Nenhum CSV sera gravado.")
+  }
+
+  codigos <- as.character(bruto$cod_mun)
+  ufs <- as.character(bruto$uf)
+  pos <- match(codigos, ref$CD_MUN)
+  if (anyNA(pos)) {
+    stop(
+      "ECO03 CSV: municipios sem nome IBGE 2025 em ", ano, ": ",
+      paste(head(unique(codigos[is.na(pos)]), 12L), collapse = ", "),
+      ". Nenhum registro foi descartado."
+    )
+  }
+  if (any(!grepl("^[0-9]{2}$", ufs)) ||
+      any(ufs != substr(codigos, 1L, 2L))) {
+    stop("ECO03 CSV: geocodigos municipais inconsistentes em ", ano)
+  }
+
+  tabela <- data.table::data.table(
+    ano = as.integer(bruto$ano),
+    uf = ufs,
+    cod_mun = codigos,
+    nm_mun = ref$NM_MUN[pos],
+    indicador = as.character(bruto$indicador),
+    grupo = as.character(bruto$grupo),
+    valor = as.numeric(bruto$valor)
+  )
+  tabela[, ordem_grupo := match(
+    grupo, c("Total", "Masculino", "Feminino")
+  )]
+  if (anyNA(tabela$ordem_grupo)) {
+    stop("ECO03 CSV: grupo desconhecido em ", ano)
+  }
+  data.table::setorder(tabela, cod_mun, ordem_grupo)
+  tabela[, ordem_grupo := NULL]
+
+  list(
+    tabela = tabela[],
+    auditoria = auditoria,
+    md5_fontes = md5_atual,
+    caminhos = caminhos
+  )
+}
+
+.conferir_eco03_csv <- function(arquivo_csv, esperado) {
+  if (!file.exists(arquivo_csv)) {
+    stop("ECO03 CSV: arquivo ausente: ", arquivo_csv)
+  }
+  lido <- data.table::fread(
+    arquivo_csv, sep = ";", dec = ".",
+    colClasses = list(character = c("uf", "cod_mun")),
+    encoding = "UTF-8", showProgress = FALSE
+  )
+  identificadores <- c(
+    "ano", "uf", "cod_mun", "nm_mun", "indicador", "grupo"
+  )
+  if (!identical(names(lido), names(esperado)) ||
+      nrow(lido) != nrow(esperado) ||
+      !all(vapply(identificadores, function(campo) {
+        identical(lido[[campo]], esperado[[campo]])
+      }, logical(1L))) ||
+      !is.numeric(lido$valor) ||
+      anyNA(lido$valor) ||
+      !isTRUE(all.equal(
+        lido$valor, esperado$valor, tolerance = 1e-12,
+        check.attributes = FALSE
+      ))) {
+    stop("ECO03 CSV: divergencia entre CSV e RDS: ", arquivo_csv,
+         ". Arquivo existente nao foi modificado.")
+  }
+  invisible(TRUE)
+}
+
+exportar_eco03_bruto_csv <- function(
+  ano,
+  arquivo_municipios = file.path(
+    "so3.3", "inputs", "referencias", "ibge",
+    "municipios_ibge_2025.csv"
+  ),
+  dir_sidra = file.path(
+    "so3.3", "inputs", "referencias", "sidra"
+  ),
+  dir_bruto = file.path("so3.3", "outputs", "bruto"),
+  dir_intermediario = file.path("so3.3", "outputs", "intermediario"),
+  somente_validar = FALSE
+) {
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    stop("ECO03 CSV: pacote data.table necessario.")
+  }
+  if (length(somente_validar) != 1L ||
+      !is.logical(somente_validar) || is.na(somente_validar)) {
+    stop("ECO03 CSV: somente_validar deve ser TRUE ou FALSE.")
+  }
+  ref <- .ler_municipios_ibge_2025(arquivo_municipios)
+  preparado <- .preparar_eco03_csv(
+    ano, ref, dir_bruto, dir_intermediario, dir_sidra
+  )
+  csv <- preparado$caminhos$csv
+  if (file.exists(csv)) {
+    .conferir_eco03_csv(csv, preparado$tabela)
+    status <- "reutilizado_validado"
+  } else if (isTRUE(somente_validar)) {
+    status <- "validado_sem_gravacao"
+  } else {
+    dir.create(dirname(csv), recursive = TRUE, showWarnings = FALSE)
+    temporario <- tempfile(
+      pattern = ".eco03_csv_",
+      tmpdir = dirname(csv),
+      fileext = ".csv"
+    )
+    on.exit(
+      if (file.exists(temporario)) unlink(temporario),
+      add = TRUE
+    )
+    data.table::fwrite(
+      preparado$tabela, temporario,
+      sep = ";", quote = "auto",
+      dec = ".", bom = FALSE, na = ""
+    )
+    .conferir_eco03_csv(temporario, preparado$tabela)
+    if (file.exists(csv)) {
+      stop("ECO03 CSV: destino apareceu durante a exportacao: ", csv)
+    }
+    if (!file.rename(temporario, csv)) {
+      stop("ECO03 CSV: nao foi possivel finalizar o arquivo: ", csv)
+    }
+    status <- "gravado_validado"
+  }
+  message("ECO03 CSV | ", ano, " | ", status, " | ", csv)
+  data.table::data.table(
+    ano = as.integer(ano),
+    indicador = "ECO03_AGROPIB",
+    municipios = data.table::uniqueN(preparado$tabela$cod_mun),
+    registros = nrow(preparado$tabela),
+    arquivo_csv = csv,
+    status = status
+  )[]
+}
+
+validar_eco03_tres_recortes_csv <- function(
+  arquivo_municipios = file.path(
+    "so3.3", "inputs", "referencias", "ibge",
+    "municipios_ibge_2025.csv"
+  ),
+  dir_sidra = file.path(
+    "so3.3", "inputs", "referencias", "sidra"
+  ),
+  dir_bruto = file.path("so3.3", "outputs", "bruto"),
+  dir_intermediario = file.path("so3.3", "outputs", "intermediario")
+) {
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    stop("ECO03 CSV: pacote data.table necessario.")
+  }
+  anos <- c(2000L, 2010L, 2022L)
+  ref <- .ler_municipios_ibge_2025(arquivo_municipios)
+  preparados <- lapply(anos, function(ano) {
+    p <- .preparar_eco03_csv(
+      ano, ref, dir_bruto, dir_intermediario, dir_sidra
+    )
+    .conferir_eco03_csv(p$caminhos$csv, p$tabela)
+    p
+  })
+  assinaturas <- vapply(
+    preparados, function(x) paste(x$md5_fontes, collapse = ":"),
+    character(1L)
+  )
+  if (length(unique(assinaturas)) != 1L) {
+    stop("ECO03 CSV: fontes distintas entre os tres recortes.")
+  }
+
+  conjunto <- data.table::rbindlist(
+    lapply(preparados, function(x) x$tabela), use.names = TRUE
+  )
+  esperado <- sum(c(5507L, 5565L, 5570L)) * 3L
+  if (nrow(conjunto) != esperado ||
+      anyNA(conjunto$valor) ||
+      any(!is.finite(conjunto$valor) | conjunto$valor < 0) ||
+      anyDuplicated(conjunto, by = c("ano", "cod_mun", "grupo")) ||
+      !identical(sort(unique(conjunto$ano)), anos) ||
+      any(conjunto$indicador != "ECO03_AGROPIB")) {
+    stop("ECO03 CSV: integracao municipal dos tres recortes inconsistente.")
+  }
+  resumo <- conjunto[, .(
+    municipios = data.table::uniqueN(cod_mun),
+    registros = .N,
+    minimo_pct = min(valor),
+    maximo_pct = max(valor)
+  ), by = .(ano, grupo)]
+  data.table::setorder(resumo, ano, grupo)
+  auditoria <- data.table::rbindlist(
+    lapply(preparados, function(x) x$auditoria), use.names = TRUE
+  )
+  auditoria_resumo <- auditoria[, .(
+    municipios = .N,
+    ano_fonte = unique(ano_fonte),
+    vab_zero = sum(vab_zero),
+    participacoes_acima_100 = sum(vab_acima_100)
+  ), by = ano]
+  data.table::setorder(auditoria_resumo, ano)
+
+  message(
+    "ECO03 | Tres CSVs conferidos com os RDS, as auditorias ",
+    "e as fontes SIDRA. Total: ", nrow(conjunto), " registros."
+  )
+  list(
+    resumo = resumo[],
+    auditoria = auditoria_resumo[],
+    registros = nrow(conjunto),
+    md5_fontes = preparados[[1L]]$md5_fontes
+  )
+}

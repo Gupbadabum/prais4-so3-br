@@ -275,90 +275,179 @@ if (DIMENSAO_ATIVA == "social") {
 # ============================================================
 
 if (DIMENSAO_ATIVA == "economica") {
+  # Sem selecao explicita, preserva o comportamento historico:
+  # ECO01 e o indicador economico padrao.
+  if (!exists("INDICADOR_ECONOMICO_ATIVO", inherits = TRUE)) {
+    INDICADOR_ECONOMICO_ATIVO <- "ECO01"
+  }
+  if (length(INDICADOR_ECONOMICO_ATIVO) != 1L ||
+      is.na(INDICADOR_ECONOMICO_ATIVO)) {
+    stop("Defina INDICADOR_ECONOMICO_ATIVO como 'ECO01' ou 'ECO03'.")
+  }
+  INDICADOR_ECONOMICO_ATIVO <- toupper(trimws(
+    as.character(INDICADOR_ECONOMICO_ATIVO)
+  ))
+  if (!INDICADOR_ECONOMICO_ATIVO %in% c("ECO01", "ECO03")) {
+    stop("Indicador economico ainda nao implementado: ",
+         INDICADOR_ECONOMICO_ATIVO,
+         ". Disponiveis: ECO01 e ECO03.")
+  }
+  message("Economica | indicador = ", INDICADOR_ECONOMICO_ATIVO)
 
-  # ECO01 implementado. ECO02 e ECO03 ainda nao integram
-  # o dispatcher economico.
-  source(
-    "so3.3/R/02_indicadores/preparar_referencias_eco01.R"
-  )
-  source(
-    "so3.3/R/02_indicadores/eco01_pobreza.R"
-  )
-  source(
-    "so3.3/R/05_exportacao/exportar_resultados_csv.R"
-  )
+  # A ramificacao evita leitura/recalculo censitario do ECO01
+  # quando o usuario escolhe exclusivamente o ECO03.
+  if (INDICADOR_ECONOMICO_ATIVO == "ECO01") {
 
-  # Um adaptador e um processador por recorte censitario.
-  if (ANO_ATIVO == 2000L) {
-    source("so3.3/R/01_leitura/adaptar_censo_2000_economica.R")
-    source("so3.3/R/04_execucao/processar_eco01_2000.R")
-
-    resultado_execucao <- processar_eco01_2000(
-      forcar_recalculo = FORCAR_RECALCULO
+    # ECO01 implementado. ECO02 e ECO03 ainda nao integram
+    # o dispatcher economico.
+    source(
+      "so3.3/R/02_indicadores/preparar_referencias_eco01.R"
     )
-  }
-
-  if (ANO_ATIVO == 2010L) {
-    source("so3.3/R/01_leitura/adaptar_censo_2010_economica.R")
-    source("so3.3/R/04_execucao/processar_eco01_2010.R")
-
-    resultado_execucao <- processar_eco01_2010(
-      forcar_recalculo = FORCAR_RECALCULO
+    source(
+      "so3.3/R/02_indicadores/eco01_pobreza.R"
     )
-  }
-
-  if (ANO_ATIVO == 2022L) {
-    source("so3.3/R/01_leitura/adaptar_censo_2022_economica.R")
-    source("so3.3/R/04_execucao/processar_eco01_2022.R")
-
-    resultado_execucao <- processar_eco01_2022(
-      forcar_recalculo = FORCAR_RECALCULO
+    source(
+      "so3.3/R/05_exportacao/exportar_resultados_csv.R"
     )
-  }
 
-  if (!isTRUE(resultado_execucao$integral)) {
-    stop("ECO01: processamento nacional incompleto; CSV nao sera gerado.")
-  }
+    # Um adaptador e um processador por recorte censitario.
+    if (ANO_ATIVO == 2000L) {
+      source("so3.3/R/01_leitura/adaptar_censo_2000_economica.R")
+      source("so3.3/R/04_execucao/processar_eco01_2000.R")
 
-  # Rele o produto nacional RDS e sua auditoria, valida
-  # municipio/grupo, e confere a leitura do CSV produzido.
-  # Um CSV existente so e reutilizado se for identico ao RDS.
-  resultado_exportacao <- exportar_eco01_bruto_csv(
-    ano = ANO_ATIVO,
-    dir_bruto = DIR_OUTPUT_BRUTO,
-    dir_intermediario = DIR_OUTPUT_INTERMEDIARIO
-  )
+      resultado_execucao <- processar_eco01_2000(
+        forcar_recalculo = FORCAR_RECALCULO
+      )
+    }
 
-  resultado_validacao_eco01 <- NULL
-  arquivos_csv_eco01 <- file.path(
-    DIR_OUTPUT_BRUTO,
-    "economica",
-    as.character(ANOS_DVI),
-    paste0("ECO01_POV3_PPC21_", ANOS_DVI, ".csv")
-  )
+    if (ANO_ATIVO == 2010L) {
+      source("so3.3/R/01_leitura/adaptar_censo_2010_economica.R")
+      source("so3.3/R/04_execucao/processar_eco01_2010.R")
 
-  if (all(file.exists(arquivos_csv_eco01))) {
-    message("ECO01 | Conferindo conjuntamente 2000, 2010 e 2022...")
-    resultado_validacao_eco01 <- validar_eco01_tres_recortes_csv(
+      resultado_execucao <- processar_eco01_2010(
+        forcar_recalculo = FORCAR_RECALCULO
+      )
+    }
+
+    if (ANO_ATIVO == 2022L) {
+      source("so3.3/R/01_leitura/adaptar_censo_2022_economica.R")
+      source("so3.3/R/04_execucao/processar_eco01_2022.R")
+
+      resultado_execucao <- processar_eco01_2022(
+        forcar_recalculo = FORCAR_RECALCULO
+      )
+    }
+
+    if (!isTRUE(resultado_execucao$integral)) {
+      stop("ECO01: processamento nacional incompleto; CSV nao sera gerado.")
+    }
+
+    # Rele o produto nacional RDS e sua auditoria, valida
+    # municipio/grupo, e confere a leitura do CSV produzido.
+    # Um CSV existente so e reutilizado se for identico ao RDS.
+    resultado_exportacao <- exportar_eco01_bruto_csv(
+      ano = ANO_ATIVO,
       dir_bruto = DIR_OUTPUT_BRUTO,
       dir_intermediario = DIR_OUTPUT_INTERMEDIARIO
     )
-    message("ECO01 | Integracao dos tres recortes validada.")
-  } else {
+
+    resultado_validacao_eco01 <- NULL
+    arquivos_csv_eco01 <- file.path(
+      DIR_OUTPUT_BRUTO,
+      "economica",
+      as.character(ANOS_DVI),
+      paste0("ECO01_POV3_PPC21_", ANOS_DVI, ".csv")
+    )
+
+    if (all(file.exists(arquivos_csv_eco01))) {
+      message("ECO01 | Conferindo conjuntamente 2000, 2010 e 2022...")
+      resultado_validacao_eco01 <- validar_eco01_tres_recortes_csv(
+        dir_bruto = DIR_OUTPUT_BRUTO,
+        dir_intermediario = DIR_OUTPUT_INTERMEDIARIO
+      )
+      message("ECO01 | Integracao dos tres recortes validada.")
+    } else {
+      message(
+        "ECO01 | Validacao conjunta pendente. CSVs ainda ausentes: ",
+        paste(basename(arquivos_csv_eco01[
+          !file.exists(arquivos_csv_eco01)
+        ]), collapse = ", ")
+      )
+    }
+
     message(
-      "ECO01 | Validacao conjunta pendente. CSVs ainda ausentes: ",
-      paste(basename(arquivos_csv_eco01[
-        !file.exists(arquivos_csv_eco01)
-      ]), collapse = ", ")
+      "Execucao concluida: Economica ", ANO_ATIVO,
+      " (somente ECO01_POV3_PPC21 e CSV bruto)."
     )
   }
 
-  message(
-    "Execucao concluida: Economica ", ANO_ATIVO,
-    " (somente ECO01_POV3_PPC21 e CSV bruto)."
-  )
-}
+  # ECO03 utiliza apenas agregados municipais SIDRA. Revalida
+  # os RDS ja gravados: resultados divergentes nunca sao
+  # substituidos automaticamente. Nenhum modulo ECO01 e carregado.
+  if (INDICADOR_ECONOMICO_ATIVO == "ECO03") {
 
+    source("so3.3/R/01_leitura/ler_sidra_economica.R")
+    source("so3.3/R/03_diagnostico/diagnosticar_sidra_economica.R")
+    source("so3.3/R/02_indicadores/eco03_agropib.R")
+    source("so3.3/R/04_execucao/processar_eco03.R")
+    source("so3.3/R/05_exportacao/exportar_resultados_csv.R")
+
+    if (isTRUE(FORCAR_RECALCULO)) {
+      message(
+        "ECO03 | FORCAR_RECALCULO nao sobrescreve os RDS: ",
+        "produtos existentes precisam ser identicos para reutilizacao."
+      )
+    }
+
+    resultado_execucao <- processar_eco03(
+      ano = ANO_ATIVO,
+      dir_bruto = DIR_OUTPUT_BRUTO,
+      dir_intermediario = DIR_OUTPUT_INTERMEDIARIO,
+      salvar = TRUE
+    )
+
+    if (!resultado_execucao$status %in% c(
+      "reutilizado_validado", "gravado_validado"
+    )) {
+      stop("ECO03: persistencia nacional nao confirmada; CSV nao gerado.")
+    }
+
+    resultado_exportacao <- exportar_eco03_bruto_csv(
+      ano = ANO_ATIVO,
+      dir_bruto = DIR_OUTPUT_BRUTO,
+      dir_intermediario = DIR_OUTPUT_INTERMEDIARIO
+    )
+
+    resultado_validacao_eco03 <- NULL
+    arquivos_csv_eco03 <- file.path(
+      DIR_OUTPUT_BRUTO,
+      "economica",
+      as.character(ANOS_DVI),
+      paste0("ECO03_AGROPIB_", ANOS_DVI, ".csv")
+    )
+
+    if (all(file.exists(arquivos_csv_eco03))) {
+      message("ECO03 | Conferindo conjuntamente 2000, 2010 e 2022...")
+      resultado_validacao_eco03 <- validar_eco03_tres_recortes_csv(
+        dir_bruto = DIR_OUTPUT_BRUTO,
+        dir_intermediario = DIR_OUTPUT_INTERMEDIARIO
+      )
+      message("ECO03 | Integracao dos tres recortes validada.")
+    } else {
+      message(
+        "ECO03 | Validacao conjunta pendente. CSVs ainda ausentes: ",
+        paste(basename(arquivos_csv_eco03[
+          !file.exists(arquivos_csv_eco03)
+        ]), collapse = ", ")
+      )
+    }
+
+    message(
+      "Execucao concluida: Economica ", ANO_ATIVO,
+      " (somente ECO03_AGROPIB e CSV bruto)."
+    )
+  }
+}
 
 # ============================================================
 # 6. DIMENSAO INFRAESTRUTURAL
