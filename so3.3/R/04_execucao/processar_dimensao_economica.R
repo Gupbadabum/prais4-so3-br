@@ -224,8 +224,10 @@ if (!requireNamespace("data.table", quietly = TRUE)) {
     }
     if ((caminhos$id[[i]] == "ECO01" &&
          any(d$valor < 0 | d$valor > 100)) ||
-        (caminhos$id[[i]] != "ECO01" &&
-         any(d$valor <= 0))) {
+        (caminhos$id[[i]] == "ECO02" &&
+         any(d$valor <= 0)) ||
+        (caminhos$id[[i]] == "ECO03" &&
+         any(d$valor < 0))) {
       stop(
         "Economica: faixa de valores inesperada em ",
         caminhos$indicador[[i]], " / ", ano
