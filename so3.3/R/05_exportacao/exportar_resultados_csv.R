@@ -842,3 +842,391 @@ validar_eco03_tres_recortes_csv <- function(
     md5_fontes = preparados[[1L]]$md5_fontes
   )
 }
+
+
+# ============================================================
+# ECO02_PIBPC - EXPORTACAO BRUTA E VALIDACAO DOS TRES RECORTES
+#
+# Valor publico: PIB per capita municipal em R$/habitante
+# a precos CONSTANTES de 2010 (indicador comum_municipal).
+# Os valores originais correntes, ano-fonte, fatores monetarios,
+# referencia populacional e hashes ficam nos RDS de auditoria.
+# CSV publico: ano;uf;cod_mun;nm_mun;indicador;grupo;valor
+#
+# Regra conservadora: CSV existente divergente NAO e alterado.
+# Nao modifica nem recalcula nenhum indicador ou RDS existente.
+# ============================================================
+
+.caminhos_eco02_csv <- function(ano, dir_bruto, dir_intermediario) {
+  ano <- .validar_ano_eco02(ano)
+  nome <- paste0("ECO02_PIBPC_", ano)
+  list(
+    rds = file.path(
+      dir_bruto, "economica", as.character(ano), paste0(nome, ".rds")
+    ),
+    auditoria = file.path(
+      dir_intermediario, "economica", as.character(ano),
+      paste0("auditoria_eco02_", ano, ".rds")
+    ),
+    csv = file.path(
+      dir_bruto, "economica", as.character(ano), paste0(nome, ".csv")
+    )
+  )
+}
+
+.contexto_eco02_csv <- function(
+  insumos_pib = NULL, insumos_sidra = NULL
+) {
+  dependencias <- c(
+    "ler_pib_municipios_eco02", "ler_sidra_economica",
+    ".validar_ano_eco02", ".ler_municipios_prais_sidra",
+    ".fontes_md5_eco02", ".assinatura_codigo_eco02",
+    "calcular_fatores_deflator_eco02", "validar_resultados_eco02"
+  )
+  faltam <- dependencias[!vapply(
+    dependencias, exists, logical(1L),
+    mode = "function", inherits = TRUE
+  )]
+  if (length(faltam)) {
+    stop(
+      "ECO02 CSV: carregue os modulos de leitura, diagnostico, ",
+      "calculo e processamento antes da exportacao: ",
+      paste(faltam, collapse = ", ")
+    )
+  }
+
+  if (is.null(insumos_pib)) {
+    insumos_pib <- ler_pib_municipios_eco02()
+  }
+  if (is.null(insumos_sidra)) {
+    insumos_sidra <- ler_sidra_economica()
+  }
+  if (!is.list(insumos_pib) ||
+      !all(c("dados", "fontes") %in% names(insumos_pib)) ||
+      !is.list(insumos_sidra) ||
+      !all(c("deflator_anual", "fontes") %in% names(insumos_sidra))) {
+    stop("ECO02 CSV: insumos IBGE/SIDRA ausentes ou incompletos.")
+  }
+
+  # Confere arquivos fisicos com os manifestos ja lidos;
+  # as taxas do deflator sao novamente acumuladas da fonte.
+  hashes <- .fontes_md5_eco02(insumos_pib, insumos_sidra)
+  fatores <- calcular_fatores_deflator_eco02(
+    insumos_sidra$deflator_anual
+  )$fatores
+
+  list(
+    pib = insumos_pib,
+    hashes = hashes,
+    fatores = fatores,
+    assinatura = .assinatura_codigo_eco02()
+  )
+}
+
+.preparar_eco02_csv <- function(
+  ano, ref, contexto, dir_bruto, dir_intermediario
+) {
+  ano <- .validar_ano_eco02(ano)
+  caminhos <- .caminhos_eco02_csv(ano, dir_bruto, dir_intermediario)
+  if (!all(file.exists(c(caminhos$rds, caminhos$auditoria)))) {
+    stop(
+      "ECO02 CSV: RDS bruto ou auditoria ausente em ", ano,
+      ". Nenhum CSV sera gerado."
+    )
+  }
+
+  bruto <- data.table::as.data.table(readRDS(caminhos$rds))
+  objeto_auditoria <- readRDS(caminhos$auditoria)
+  assinatura_salva <- attr(
+    objeto_auditoria, "assinatura_codigo_eco02", exact = TRUE
+  )
+  auditoria <- data.table::as.data.table(objeto_auditoria)
+  codigos_prais <- .ler_municipios_prais_sidra(ano, dir_bruto)
+  validar_resultados_eco02(
+    bruto, auditoria, ano, codigos_prais, contexto$fatores
+  )
+
+  if (is.null(assinatura_salva) ||
+      !identical(assinatura_salva, contexto$assinatura)) {
+    stop(
+      "ECO02 CSV: assinatura do codigo difere do RDS em ", ano,
+      ". Nenhum produto sera sobrescrito."
+    )
+  }
+
+  hashes_auditoria <- c(
+    unique(as.character(auditoria$md5_ibge_2002_2009)),
+    unique(as.character(auditoria$md5_ibge_2010_2023)),
+    unique(as.character(auditoria$md5_sidra_6784))
+  )
+  if (length(hashes_auditoria) != 3L ||
+      anyNA(hashes_auditoria) ||
+      !identical(
+        unname(hashes_auditoria), unname(contexto$hashes)
+      )) {
+    stop("ECO02 CSV: MD5 de XLSX/deflator difere do RDS em ", ano)
+  }
+
+  # A auditoria nacional precisa concordar com o PIB per capita
+  # CORRENTE e o PIB municipal originais, nao apenas com o fator.
+  fonte <- data.table::as.data.table(contexto$pib$dados)[
+    ano_prais == ano
+  ]
+  pos_fonte <- match(auditoria$cod_mun, fonte$cod_mun)
+  if (length(pos_fonte) != nrow(auditoria) ||
+      anyNA(pos_fonte) ||
+      !identical(
+        as.character(auditoria$uf),
+        as.character(fonte$uf[pos_fonte])
+      ) ||
+      !identical(
+        as.character(auditoria$nome_mun_ibge),
+        as.character(fonte$nome_mun_ibge[pos_fonte])
+      ) ||
+      !identical(
+        as.numeric(auditoria$pib_mil_reais),
+        as.numeric(fonte$pib_mil_reais[pos_fonte])
+      ) ||
+      !identical(
+        as.numeric(auditoria$pib_pc_corrente_reais),
+        as.numeric(fonte$pib_pc_reais[pos_fonte])
+      ) ||
+      !identical(
+        as.character(auditoria$referencia_populacional),
+        as.character(fonte$referencia_populacional[pos_fonte])
+      )) {
+    stop(
+      "ECO02 CSV: auditoria municipal nao reproduz os valores ",
+      "correntes oficiais IBGE em ", ano, "."
+    )
+  }
+
+  codigos <- as.character(bruto$cod_mun)
+  ufs <- as.character(bruto$uf)
+  pos_nomes <- match(codigos, ref$CD_MUN)
+  if (anyNA(pos_nomes)) {
+    stop(
+      "ECO02 CSV: municipios sem nome IBGE 2025 em ", ano, ": ",
+      paste(head(unique(codigos[is.na(pos_nomes)]), 12L),
+            collapse = ", "),
+      ". Nenhum municipio sera descartado."
+    )
+  }
+  if (any(!grepl("^[0-9]{7}$", codigos)) ||
+      any(!grepl("^[0-9]{2}$", ufs)) ||
+      any(ufs != substr(codigos, 1L, 2L))) {
+    stop("ECO02 CSV: geocodigos municipais invalidos em ", ano)
+  }
+
+  tabela <- data.table::data.table(
+    ano = as.integer(bruto$ano),
+    uf = ufs,
+    cod_mun = codigos,
+    nm_mun = ref$NM_MUN[pos_nomes],
+    indicador = as.character(bruto$indicador),
+    grupo = as.character(bruto$grupo),
+    valor = as.numeric(bruto$valor)
+  )
+
+  tabela[, ordem_grupo := match(
+    grupo, c("Total", "Masculino", "Feminino")
+  )]
+  if (anyNA(tabela$ordem_grupo)) {
+    stop("ECO02 CSV: grupo desconhecido em ", ano)
+  }
+  data.table::setorder(tabela, cod_mun, ordem_grupo)
+  tabela[, ordem_grupo := NULL]
+
+  list(
+    tabela = tabela[],
+    auditoria = auditoria,
+    caminhos = caminhos,
+    md5_fontes = contexto$hashes
+  )
+}
+
+.conferir_eco02_csv <- function(arquivo_csv, esperado) {
+  if (!file.exists(arquivo_csv)) {
+    stop("ECO02 CSV: arquivo para conferencia ausente: ", arquivo_csv)
+  }
+  lido <- data.table::fread(
+    arquivo_csv,
+    sep = ";", dec = ".",
+    colClasses = list(character = c("uf", "cod_mun")),
+    encoding = "UTF-8", showProgress = FALSE
+  )
+  identificadores <- c(
+    "ano", "uf", "cod_mun", "nm_mun", "indicador", "grupo"
+  )
+  if (!identical(names(lido), names(esperado)) ||
+      nrow(lido) != nrow(esperado) ||
+      !all(vapply(identificadores, function(campo) {
+        identical(lido[[campo]], esperado[[campo]])
+      }, logical(1L))) ||
+      !is.numeric(lido$valor) ||
+      anyNA(lido$valor) ||
+      any(!is.finite(lido$valor) | lido$valor <= 0) ||
+      !isTRUE(all.equal(
+        lido$valor, esperado$valor,
+        tolerance = 1e-12, check.attributes = FALSE
+      ))) {
+    stop(
+      "ECO02 CSV: divergencia entre CSV e RDS: ", arquivo_csv,
+      ". Arquivo existente nao foi modificado."
+    )
+  }
+  invisible(TRUE)
+}
+
+exportar_eco02_bruto_csv <- function(
+  ano,
+  arquivo_municipios = file.path(
+    "so3.3", "inputs", "referencias", "ibge",
+    "municipios_ibge_2025.csv"
+  ),
+  insumos_pib = NULL,
+  insumos_sidra = NULL,
+  dir_bruto = file.path("so3.3", "outputs", "bruto"),
+  dir_intermediario = file.path("so3.3", "outputs", "intermediario"),
+  somente_validar = FALSE
+) {
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    stop("ECO02 CSV: pacote data.table necessario.")
+  }
+  if (length(somente_validar) != 1L ||
+      !is.logical(somente_validar) || is.na(somente_validar)) {
+    stop("ECO02 CSV: somente_validar deve ser TRUE ou FALSE.")
+  }
+
+  contexto <- .contexto_eco02_csv(insumos_pib, insumos_sidra)
+  ref <- .ler_municipios_ibge_2025(arquivo_municipios)
+  preparado <- .preparar_eco02_csv(
+    ano, ref, contexto, dir_bruto, dir_intermediario
+  )
+  csv <- preparado$caminhos$csv
+
+  if (file.exists(csv)) {
+    .conferir_eco02_csv(csv, preparado$tabela)
+    status <- "reutilizado_validado"
+  } else if (isTRUE(somente_validar)) {
+    status <- "validado_sem_gravacao"
+  } else {
+    dir.create(dirname(csv), recursive = TRUE, showWarnings = FALSE)
+    temporario <- tempfile(
+      pattern = ".eco02_csv_",
+      tmpdir = dirname(csv), fileext = ".csv"
+    )
+    on.exit(
+      if (file.exists(temporario)) unlink(temporario),
+      add = TRUE
+    )
+
+    data.table::fwrite(
+      preparado$tabela,
+      file = temporario,
+      sep = ";",
+      quote = "auto",
+      dec = ".",
+      bom = FALSE,
+      na = ""
+    )
+    .conferir_eco02_csv(temporario, preparado$tabela)
+    if (file.exists(csv)) {
+      stop("ECO02 CSV: destino apareceu durante exportacao: ", csv)
+    }
+    if (!file.rename(temporario, csv)) {
+      stop("ECO02 CSV: nao foi possivel finalizar arquivo: ", csv)
+    }
+    status <- "gravado_validado"
+  }
+
+  message("ECO02 CSV | ", ano, " | ", status, " | ", csv)
+  data.table::data.table(
+    ano = as.integer(ano),
+    indicador = "ECO02_PIBPC",
+    municipios = data.table::uniqueN(preparado$tabela$cod_mun),
+    registros = nrow(preparado$tabela),
+    arquivo_csv = csv,
+    status = status
+  )[]
+}
+
+validar_eco02_tres_recortes_csv <- function(
+  arquivo_municipios = file.path(
+    "so3.3", "inputs", "referencias", "ibge",
+    "municipios_ibge_2025.csv"
+  ),
+  insumos_pib = NULL,
+  insumos_sidra = NULL,
+  dir_bruto = file.path("so3.3", "outputs", "bruto"),
+  dir_intermediario = file.path("so3.3", "outputs", "intermediario")
+) {
+  if (!requireNamespace("data.table", quietly = TRUE)) {
+    stop("ECO02 CSV: pacote data.table necessario.")
+  }
+  anos <- c(2000L, 2010L, 2022L)
+  contexto <- .contexto_eco02_csv(insumos_pib, insumos_sidra)
+  ref <- .ler_municipios_ibge_2025(arquivo_municipios)
+
+  preparados <- lapply(anos, function(ano) {
+    p <- .preparar_eco02_csv(
+      ano, ref, contexto, dir_bruto, dir_intermediario
+    )
+    .conferir_eco02_csv(p$caminhos$csv, p$tabela)
+    p
+  })
+
+  hashes <- vapply(
+    preparados, function(x) paste(x$md5_fontes, collapse = ":"),
+    character(1L)
+  )
+  if (length(unique(hashes)) != 1L) {
+    stop("ECO02 CSV: os recortes usam fontes monetarias divergentes.")
+  }
+  conjunto <- data.table::rbindlist(
+    lapply(preparados, function(x) x$tabela), use.names = TRUE
+  )
+  if (nrow(conjunto) != 49926L ||
+      anyNA(conjunto$valor) ||
+      any(!is.finite(conjunto$valor) | conjunto$valor <= 0) ||
+      anyDuplicated(conjunto, by = c("ano", "cod_mun", "grupo")) ||
+      !identical(sort(unique(conjunto$ano)), anos) ||
+      any(conjunto$indicador != "ECO02_PIBPC")) {
+    stop("ECO02 CSV: integracao dos tres recortes inconsistente.")
+  }
+
+  resumo <- conjunto[, .(
+    municipios = data.table::uniqueN(cod_mun),
+    registros = .N,
+    minimo_reais_2010 = min(valor),
+    maximo_reais_2010 = max(valor)
+  ), by = .(ano, grupo)]
+  data.table::setorder(resumo, ano, grupo)
+
+  auditoria <- data.table::rbindlist(
+    lapply(preparados, function(x) x$auditoria), use.names = TRUE
+  )
+  resumo_auditoria <- auditoria[, .(
+    municipios = .N,
+    ano_fonte = unique(ano_fonte),
+    ano_base_monetaria = unique(ano_base_monetaria),
+    minimo_corrente_reais = min(pib_pc_corrente_reais),
+    maximo_corrente_reais = max(pib_pc_corrente_reais),
+    fator_deflator_2010 = unique(fator_deflator_2010),
+    minimo_reais_2010 = min(pib_pc_reais_2010),
+    maximo_reais_2010 = max(pib_pc_reais_2010)
+  ), by = ano]
+  data.table::setorder(resumo_auditoria, ano)
+
+  message(
+    "ECO02 | Tres CSVs conferidos com RDS, auditorias ",
+    "e fontes IBGE/SIDRA. Total: ", nrow(conjunto), " registros."
+  )
+  list(
+    resumo = resumo[],
+    auditoria = resumo_auditoria[],
+    registros = nrow(conjunto),
+    fatores_deflator = contexto$fatores,
+    md5_fontes = contexto$hashes
+  )
+}

@@ -282,15 +282,15 @@ if (DIMENSAO_ATIVA == "economica") {
   }
   if (length(INDICADOR_ECONOMICO_ATIVO) != 1L ||
       is.na(INDICADOR_ECONOMICO_ATIVO)) {
-    stop("Defina INDICADOR_ECONOMICO_ATIVO como 'ECO01' ou 'ECO03'.")
+    stop("Defina INDICADOR_ECONOMICO_ATIVO como 'ECO01', 'ECO02' ou 'ECO03'.")
   }
   INDICADOR_ECONOMICO_ATIVO <- toupper(trimws(
     as.character(INDICADOR_ECONOMICO_ATIVO)
   ))
-  if (!INDICADOR_ECONOMICO_ATIVO %in% c("ECO01", "ECO03")) {
+  if (!INDICADOR_ECONOMICO_ATIVO %in% c("ECO01", "ECO02", "ECO03")) {
     stop("Indicador economico ainda nao implementado: ",
          INDICADOR_ECONOMICO_ATIVO,
-         ". Disponiveis: ECO01 e ECO03.")
+         ". Disponiveis: ECO01, ECO02 e ECO03.")
   }
   message("Economica | indicador = ", INDICADOR_ECONOMICO_ATIVO)
 
@@ -298,8 +298,7 @@ if (DIMENSAO_ATIVA == "economica") {
   # quando o usuario escolhe exclusivamente o ECO03.
   if (INDICADOR_ECONOMICO_ATIVO == "ECO01") {
 
-    # ECO01 implementado. ECO02 e ECO03 ainda nao integram
-    # o dispatcher economico.
+    # O fluxo ECO01 permanece independente dos demais indicadores.
     source(
       "so3.3/R/02_indicadores/preparar_referencias_eco01.R"
     )
@@ -378,6 +377,112 @@ if (DIMENSAO_ATIVA == "economica") {
     message(
       "Execucao concluida: Economica ", ANO_ATIVO,
       " (somente ECO01_POV3_PPC21 e CSV bruto)."
+    )
+  }
+
+  # ECO02 utiliza o PIB per capita oficial e o deflator SIDRA.
+  # Os RDS ja devem ter sido gravados e validados previamente.
+  # A reexecucao comprova que reproduzem os insumos e o codigo
+  # atuais; nao recalcula microdados do ECO01 nem altera ECO03.
+  if (INDICADOR_ECONOMICO_ATIVO == "ECO02") {
+
+    source("so3.3/R/01_leitura/ler_pib_municipios_eco02.R")
+    source("so3.3/R/01_leitura/ler_sidra_economica.R")
+    source("so3.3/R/03_diagnostico/diagnosticar_sidra_economica.R")
+    source("so3.3/R/03_diagnostico/diagnosticar_pib_municipios_eco02.R")
+    source("so3.3/R/02_indicadores/eco02_pibpc.R")
+    source("so3.3/R/04_execucao/processar_eco02.R")
+    source("so3.3/R/05_exportacao/exportar_resultados_csv.R")
+
+    arquivos_rds_eco02 <- c(
+      file.path(
+        DIR_OUTPUT_BRUTO, "economica", as.character(ANO_ATIVO),
+        paste0("ECO02_PIBPC_", ANO_ATIVO, ".rds")
+      ),
+      file.path(
+        DIR_OUTPUT_INTERMEDIARIO, "economica",
+        as.character(ANO_ATIVO),
+        paste0("auditoria_eco02_", ANO_ATIVO, ".rds")
+      )
+    )
+    if (!all(file.exists(arquivos_rds_eco02))) {
+      stop(
+        "ECO02: RDS e auditoria previamente validados sao ",
+        "obrigatorios antes da exportacao. Ausentes: ",
+        paste(arquivos_rds_eco02[
+          !file.exists(arquivos_rds_eco02)
+        ], collapse = ", "),
+        ". Execute processar_eco02(ano, salvar = TRUE) ",
+        "e confirme o status antes de usar o main.R."
+      )
+    }
+
+    if (isTRUE(FORCAR_RECALCULO)) {
+      message(
+        "ECO02 | FORCAR_RECALCULO nao sobrescreve RDS/CSV: ",
+        "arquivos existentes precisam ser identicos para reutilizacao."
+      )
+    }
+
+    # Reutiliza os insumos nas tres etapas para evitar reler os
+    # XLSX historicos e as tabelas SIDRA desnecessariamente.
+    insumos_pib_eco02 <- ler_pib_municipios_eco02()
+    insumos_sidra_eco02 <- ler_sidra_economica()
+    diagnostico_pib_eco02 <- diagnosticar_pib_municipios_eco02(
+      insumos_pib = insumos_pib_eco02,
+      insumos_sidra = insumos_sidra_eco02,
+      dir_bruto = DIR_OUTPUT_BRUTO
+    )
+    resultado_execucao <- processar_eco02(
+      ano = ANO_ATIVO,
+      insumos_pib = insumos_pib_eco02,
+      insumos_sidra = insumos_sidra_eco02,
+      diagnostico = diagnostico_pib_eco02,
+      dir_bruto = DIR_OUTPUT_BRUTO,
+      dir_intermediario = DIR_OUTPUT_INTERMEDIARIO,
+      salvar = TRUE
+    )
+    if (!identical(resultado_execucao$status, "reutilizado_validado")) {
+      stop("ECO02: RDS preexistentes nao foram reutilizados/validados.")
+    }
+
+    resultado_exportacao <- exportar_eco02_bruto_csv(
+      ano = ANO_ATIVO,
+      insumos_pib = insumos_pib_eco02,
+      insumos_sidra = insumos_sidra_eco02,
+      dir_bruto = DIR_OUTPUT_BRUTO,
+      dir_intermediario = DIR_OUTPUT_INTERMEDIARIO
+    )
+
+    resultado_validacao_eco02 <- NULL
+    arquivos_csv_eco02 <- file.path(
+      DIR_OUTPUT_BRUTO,
+      "economica",
+      as.character(ANOS_DVI),
+      paste0("ECO02_PIBPC_", ANOS_DVI, ".csv")
+    )
+
+    if (all(file.exists(arquivos_csv_eco02))) {
+      message("ECO02 | Conferindo conjuntamente 2000, 2010 e 2022...")
+      resultado_validacao_eco02 <- validar_eco02_tres_recortes_csv(
+        insumos_pib = insumos_pib_eco02,
+        insumos_sidra = insumos_sidra_eco02,
+        dir_bruto = DIR_OUTPUT_BRUTO,
+        dir_intermediario = DIR_OUTPUT_INTERMEDIARIO
+      )
+      message("ECO02 | Integracao dos tres recortes validada.")
+    } else {
+      message(
+        "ECO02 | Validacao conjunta pendente. CSVs ainda ausentes: ",
+        paste(basename(arquivos_csv_eco02[
+          !file.exists(arquivos_csv_eco02)
+        ]), collapse = ", ")
+      )
+    }
+
+    message(
+      "Execucao concluida: Economica ", ANO_ATIVO,
+      " (somente ECO02_PIBPC em R$ de 2010 e CSV bruto)."
     )
   }
 
