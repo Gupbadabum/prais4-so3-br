@@ -311,13 +311,84 @@ if (DIMENSAO_ATIVA == "economica") {
 
 
 # ============================================================
-# 6. DIMENSAO INFRAESTRUTURAL
+# 6. DIMENSAO INFRAESTRUTURAL - INF01
 # ============================================================
 
 if (DIMENSAO_ATIVA == "infraestrutural") {
 
-  stop(
-    "A dimensao Infraestrutural ainda nao foi migrada para o ",
-    "dispatcher por dimensao + ano."
+  # A integracao atual cobre SOMENTE INF01: acesso a rede geral
+  # como fonte principal, com canalizacao interna (Total/Masc/Fem).
+  # Outros indicadores infraestruturais nao estao integrados.
+  #
+  # Os processadores ja validados preservam checkpoints e produtos
+  # divergentes; a execucao pelo main.R nao autoriza recalculo
+  # destrutivo nem altera os resultados municipais aprovados.
+
+  if (FORCAR_RECALCULO) {
+    stop(
+      "INF01: FORCAR_RECALCULO=TRUE nao e permitido no main.R. ",
+      "Os processadores de producao nao sobrescrevem resultados."
+    )
+  }
+
+  ARQ_PROCESSADOR_INF01 <- switch(
+    as.character(ANO_ATIVO),
+    "2000" = "so3.3/R/04_execucao/processar_inf01.R",
+    "2010" = "so3.3/R/04_execucao/processar_inf01_2010.R",
+    "2022" = "so3.3/R/04_execucao/processar_inf01_2022.R"
+  )
+
+  if (is.null(ARQ_PROCESSADOR_INF01) ||
+      !file.exists(ARQ_PROCESSADOR_INF01)) {
+    stop(
+      "INF01/", ANO_ATIVO, ": processador nao encontrado: ",
+      ARQ_PROCESSADOR_INF01,
+      ". Versione os modulos do indicador antes de executar."
+    )
+  }
+
+  source(ARQ_PROCESSADOR_INF01)
+
+  resultado_execucao <- switch(
+    as.character(ANO_ATIVO),
+    "2000" = processar_inf01(
+      ano = ANO_ATIVO,
+      promover = TRUE,
+      forcar_recalculo = FALSE
+    ),
+    "2010" = processar_inf01_2010(
+      promover = TRUE,
+      forcar_recalculo = FALSE,
+      origem = "teste12"
+    ),
+    "2022" = processar_inf01_2022(
+      promover = TRUE,
+      forcar_recalculo = FALSE,
+      origem = "teste18"
+    )
+  )
+
+  STATUS_INF01_VALIDOS <- c(
+    "bruto_gravado_validado",
+    "bruto_reutilizado_validado"
+  )
+
+  if (!is.list(resultado_execucao) ||
+      !isTRUE(resultado_execucao$integral) ||
+      length(resultado_execucao$status) != 1L ||
+      is.na(resultado_execucao$status) ||
+      !resultado_execucao$status %in% STATUS_INF01_VALIDOS) {
+    stop(
+      "INF01/", ANO_ATIVO,
+      ": execucao sem promocao integral e validada."
+    )
+  }
+
+  resultado_exportacao <- resultado_execucao$arquivo_bruto_csv
+
+  message(
+    "Execucao concluida: Infraestrutural ", ANO_ATIVO,
+    " / INF01 (Total, Masculino e Feminino). ",
+    "A dimensao Infraestrutural completa ainda nao foi integrada."
   )
 }
