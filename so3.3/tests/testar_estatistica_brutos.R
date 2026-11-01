@@ -57,21 +57,39 @@ if (all(file.exists(arquivos_soc01))) {
 }
 
 # Testes adicionais COINr type=2, orcamentos e nao intervencao.
-# Vetor analitico: skew=2, curtose excedente=4 (e1071 type=2).
-m <- estat_so33_momentos_coinr(c(0, 0, 0, 10))
-stopifnot(isTRUE(all.equal(m$assimetria, 2, tolerance = 1e-12)),
-          isTRUE(all.equal(m$curtose_excesso, 4, tolerance = 1e-12)),
+# Exemplo nao limitrofe: assimetria = sqrt(5) e curtose excedente = 5.
+# Evita verificar status em skew = 2, que pode ser calculado como
+# 1.9999999999999998 e portanto PASSAR pela regra estrita do COINr.
+vetor_outlier <- c(0, 0, 0, 0, 10)
+m <- estat_so33_momentos_coinr(vetor_outlier)
+stopifnot(isTRUE(all.equal(m$assimetria, sqrt(5), tolerance = 1e-12)),
+          isTRUE(all.equal(m$curtose_excesso, 5, tolerance = 1e-12)),
           identical(m$status, "INVESTIGAR"),
           isTRUE(m$investigar), identical(m$cauda_assimetria, "superior"))
-m2 <- estat_so33_momentos_coinr(c(10, 0, 0, 0))
-stopifnot(isTRUE(all.equal(m2$assimetria, 2, tolerance = 1e-12)))
+
+# Assimetria extrema negativa: apenas o grupo do proprio teste.
+m2 <- estat_so33_momentos_coinr(c(10, 10, 10, 10, 0))
+stopifnot(isTRUE(all.equal(m2$assimetria, -sqrt(5), tolerance = 1e-12)),
+          identical(m2$status, "INVESTIGAR"),
+          identical(m2$cauda_assimetria, "inferior"))
+
+# Serie simetrica deve passar; serie constante nao define momentos.
+mpassa <- estat_so33_momentos_coinr(c(1, 2, 3, 4, 5))
+stopifnot(identical(mpassa$status, "PASSA"),
+          identical(mpassa$investigar, FALSE))
 m3 <- estat_so33_momentos_coinr(c(0, 0, 0, 0, 0))
 stopifnot(grepl("^INDETERMINADO", m3$status),
           is.na(m3$investigar))
 m4 <- estat_so33_momentos_coinr(c(1, 2, 3))
 stopifnot(grepl("N_INSUFICIENTE", m4$status))
-m5 <- estat_so33_momentos_coinr(c(0, 0, 0, 10, NA_real_))
-stopifnot(isTRUE(all.equal(m5$assimetria, 2, tolerance = 1e-12)))
+m5 <- estat_so33_momentos_coinr(c(0, 0, 0, 0, 10, NA_real_))
+stopifnot(isTRUE(all.equal(m5$assimetria, sqrt(5), tolerance = 1e-12)))
+
+# Fronteira numerica: verifica apenas a precisao do momento,
+# NAO presume classificacao independente do arredondamento binario.
+mb <- estat_so33_momentos_coinr(c(0, 0, 0, 10))
+stopifnot(isTRUE(all.equal(abs(mb$assimetria), 2, tolerance = 1e-12)),
+          isTRUE(all.equal(mb$curtose_excesso, 4, tolerance = 1e-12)))
 orc <- estat_so33_orcamentos_winsor(16642)
 stopifnot(identical(orc$max_modificacoes_total, c(0L, 832L, 832L, 832L)),
           identical(orc$max_modificacoes_inferior, c(0L, 416L, 832L, 0L)),
@@ -104,12 +122,17 @@ if (all(file.exists(arquivos_soc01))) {
 }
 # Se o pacote de referencia estiver instalado, verifica equivalencia numerica.
 if (requireNamespace("COINr", quietly = TRUE)) {
-  z <- c(0, 0, 0, 10)
+  z <- vetor_outlier
   stopifnot(isTRUE(all.equal(estat_so33_momentos_coinr(z)$assimetria,
                              COINr::skew(z), tolerance = 1e-12)),
             isTRUE(all.equal(estat_so33_momentos_coinr(z)$curtose_excesso,
                              COINr::kurt(z), tolerance = 1e-12)))
-  message("Comparacao contra COINr instalado: OK")
+  # Confere tambem a classificacao de fronteira do proprio COINr:
+  # o status nao e imposto quando o momento difere por arredondamento.
+  ref_fronteira <- COINr::check_SkewKurt(c(0, 0, 0, 10))
+  stopifnot(identical(mb$status == "PASSA",
+                      isTRUE(ref_fronteira$Pass)))
+  message("Comparacao contra COINr instalado (inclusive fronteira): OK")
 }
 
 message("Testes estatisticos SO3.3: OK")

@@ -123,6 +123,14 @@ ate 832 em uma unica cauda. O percentual aplica-se exclusivamente aos
 dados **validos da propria serie**, nao a outros indicadores, grupos ou
 aos anos separadamente.
 
+**Atencao aos casos de fronteira:** a triagem usa desigualdades estritas,
+como no COINr. Uma assimetria teoricamente igual a 2 pode ser representada
+numericamente como `1.9999999999999998` e, nesse caso, ser classificada
+como `PASSA`. Os testes de classificacao usam exemplos inequivocamente
+abaixo ou acima dos limiares; os testes de valores de fronteira verificam
+as formulas sem impor arredondamento arbitrario ou uma regra distinta da
+referencia.
+
 ### Informacoes incorporadas ao diagnostico
 
 O arquivo `02_estatisticas_conjuntas.csv` passa a incluir as colunas
