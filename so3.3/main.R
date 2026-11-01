@@ -311,18 +311,26 @@ if (DIMENSAO_ATIVA == "economica") {
 
 
 # ============================================================
-# 6. DIMENSAO INFRAESTRUTURAL - INF01
+# 6. DIMENSAO INFRAESTRUTURAL - INF01 + INF02
 # ============================================================
 
 if (DIMENSAO_ATIVA == "infraestrutural") {
 
-  # A integracao atual cobre SOMENTE INF01: acesso a rede geral
-  # como fonte principal, com canalizacao interna (Total/Masc/Fem).
-  # Outros indicadores infraestruturais nao estao integrados.
-  #
-  # Os processadores ja validados preservam checkpoints e produtos
-  # divergentes; a execucao pelo main.R nao autoriza recalculo
-  # destrutivo nem altera os resultados municipais aprovados.
+  # INF01 usa os processadores originais; INF02 somente valida e reutiliza
+  # os produtos brutos da E03 previamente promovidos.
+  # Proibidos reprocessamento destrutivo e sobrescrita implicita.
+
+  # Preflight: evita iniciar o INF01 quando faltar um par da E03.
+  ARQ_INF02_RDS <- file.path(
+    DIR_OUTPUT_BRUTO, "infraestrutural", as.character(ANO_ATIVO),
+    paste0("INF02_RECURSOS_HIDRICOS_PC_", ANO_ATIVO, ".rds")
+  )
+  ARQ_INF02_CSV <- sub("[.]rds$", ".csv", ARQ_INF02_RDS)
+  if (!file.exists(ARQ_INF02_RDS) || !file.exists(ARQ_INF02_CSV)) {
+    stop("Infraestrutural/", ANO_ATIVO,
+         ": INF02 E03 nao promovido (par RDS/CSV ausente). ",
+         "Promova os produtos da E03 antes de executar main.R.")
+  }
 
   if (FORCAR_RECALCULO) {
     stop(
@@ -384,11 +392,34 @@ if (DIMENSAO_ATIVA == "infraestrutural") {
     )
   }
 
-  resultado_exportacao <- resultado_execucao$arquivo_bruto_csv
+  resultado_inf01 <- resultado_execucao
 
-  message(
-    "Execucao concluida: Infraestrutural ", ANO_ATIVO,
-    " / INF01 (Total, Masculino e Feminino). ",
-    "A dimensao Infraestrutural completa ainda nao foi integrada."
+  ARQ_PROCESSADOR_INF02 <- "so3.3/R/04_execucao/processar_inf02.R"
+  if (!file.exists(ARQ_PROCESSADOR_INF02)) {
+    stop("INF02: processador nao encontrado: ", ARQ_PROCESSADOR_INF02)
+  }
+  source(ARQ_PROCESSADOR_INF02)
+  resultado_inf02 <- processar_inf02(ano = ANO_ATIVO)
+
+  if (!is.list(resultado_inf02) ||
+      !isTRUE(resultado_inf02$integral) ||
+      !identical(resultado_inf02$status,
+                 "bruto_reutilizado_validado_com_ressalva")) {
+    stop("INF02/", ANO_ATIVO, ": integracao incompleta.")
+  }
+
+  resultado_execucao <- list(
+    dimensao = "infraestrutural",
+    ano = ANO_ATIVO,
+    integral = TRUE,
+    indicadores = list(INF01 = resultado_inf01, INF02 = resultado_inf02),
+    ressalva = "INF02_CALCULADO_COM_RESSALVA_NAO_HARMONIZADO"
   )
+  resultado_exportacao <- list(
+    INF01 = resultado_inf01$arquivo_bruto_csv,
+    INF02 = resultado_inf02$arquivo_bruto_csv
+  )
+
+  message("Execucao integral concluida: Infraestrutural ", ANO_ATIVO,
+          " (INF01 e INF02). INF02: nao harmonizado territorialmente.")
 }
