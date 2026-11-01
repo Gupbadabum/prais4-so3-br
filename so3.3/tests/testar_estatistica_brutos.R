@@ -56,4 +56,60 @@ if (all(file.exists(arquivos_soc01))) {
   message("CSVs SOC01 ausentes; teste sintetico concluido sem regressao real.")
 }
 
+# Testes adicionais COINr type=2, orcamentos e nao intervencao.
+# Vetor analitico: skew=2, curtose excedente=4 (e1071 type=2).
+m <- estat_so33_momentos_coinr(c(0, 0, 0, 10))
+stopifnot(isTRUE(all.equal(m$assimetria, 2, tolerance = 1e-12)),
+          isTRUE(all.equal(m$curtose_excesso, 4, tolerance = 1e-12)),
+          identical(m$status, "INVESTIGAR"),
+          isTRUE(m$investigar), identical(m$cauda_assimetria, "superior"))
+m2 <- estat_so33_momentos_coinr(c(10, 0, 0, 0))
+stopifnot(isTRUE(all.equal(m2$assimetria, 2, tolerance = 1e-12)))
+m3 <- estat_so33_momentos_coinr(c(0, 0, 0, 0, 0))
+stopifnot(grepl("^INDETERMINADO", m3$status),
+          is.na(m3$investigar))
+m4 <- estat_so33_momentos_coinr(c(1, 2, 3))
+stopifnot(grepl("N_INSUFICIENTE", m4$status))
+m5 <- estat_so33_momentos_coinr(c(0, 0, 0, 10, NA_real_))
+stopifnot(isTRUE(all.equal(m5$assimetria, 2, tolerance = 1e-12)))
+orc <- estat_so33_orcamentos_winsor(16642)
+stopifnot(identical(orc$max_modificacoes_total, c(0L, 832L, 832L, 832L)),
+          identical(orc$max_modificacoes_inferior, c(0L, 416L, 832L, 0L)),
+          identical(orc$max_modificacoes_superior, c(0L, 416L, 0L, 832L)))
+stopifnot(inherits(try(estat_so33_orcamentos_winsor(16642, 0.06),
+                       silent = TRUE), "try-error"))
+
+# Controle de nao alteracao e de que flags anuais nao estabelecem limites.
+serie_teste <- series[["Total"]]
+antes_teste <- serie_teste$valor
+scon <- estat_so33_resumir(serie_teste, "social", "SOC01_ALF15", "Total")
+sano <- estat_so33_resumir(serie_teste[serie_teste$ano == 2000, ],
+                          "social", "SOC01_ALF15", "Total",
+                          escopo = "descritivo_anual_sem_limiares",
+                          ano_descritivo = 2000L)
+stopifnot(identical(antes_teste, serie_teste$valor),
+          scon$teto_modificacoes_5pct == 0L,
+          is.na(sano$teto_modificacoes_5pct),
+          identical(sano$triagem_coinr, "APENAS_DESCRITIVO_ANUAL"))
+
+if (all(file.exists(arquivos_soc01))) {
+  r_coinr <- estat_so33_diagnosticar("SOC01_ALF15", dir_saida = NULL)
+  z <- r_coinr$estatisticas_conjuntas
+  stopifnot(nrow(z) == 3L, all(z$triagem_coinr == "PASSA"),
+            all(!z$investigar_winsorizacao),
+            all(z$teto_modificacoes_5pct == 832L),
+            all(z$teto_por_cauda_bilateral_2p5pct == 416L),
+            nrow(r_coinr$orcamentos_winsorizacao) == 12L)
+  message("Regressao SOC01 e triagem COINr real: OK")
+}
+# Se o pacote de referencia estiver instalado, verifica equivalencia numerica.
+if (requireNamespace("COINr", quietly = TRUE)) {
+  z <- c(0, 0, 0, 10)
+  stopifnot(isTRUE(all.equal(estat_so33_momentos_coinr(z)$assimetria,
+                             COINr::skew(z), tolerance = 1e-12)),
+            isTRUE(all.equal(estat_so33_momentos_coinr(z)$curtose_excesso,
+                             COINr::kurt(z), tolerance = 1e-12)))
+  message("Comparacao contra COINr instalado: OK")
+}
+
 message("Testes estatisticos SO3.3: OK")

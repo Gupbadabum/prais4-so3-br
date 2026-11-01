@@ -68,6 +68,7 @@ Os arquivos são:
 | `03_descritivas_anuais.csv` | Evolução descritiva por ano, **sem limiares anuais** |
 | `04_extremos_inspecao.csv` | Municípios nos extremos inferior e superior, somente para inspeção |
 | `05_status_INF02.csv` | Quando aplicável, frequência de status e ressalvas do INF02 |
+| `06_orcamentos_winsorizacao.csv` | Regimes de ate 5%, em carater exclusivamente diagnostico, por serie indicador/grupo |
 | `LEIA_ME.txt` / `sessao_R.txt` | Condições de execução e ambiente R |
 
 A rotina valida o contrato dos CSVs, cardinalidade territorial, os três grupos, chaves município–ano–grupo, valores numéricos, percentuais fisicamente delimitados e a identidade dos atributos territoriais compartilhados. Para INF02, preserva as ausências e verifica a correspondência com o estado de cálculo. Não força valores ausentes para zero; não corta ECO03 em 100%.
@@ -87,3 +88,70 @@ Após interpretação e aprovação do diagnóstico Social, serão documentados 
 5. Testes de sensibilidade, rastreabilidade e validação de cada fase.
 
 Os futuros módulos de transformação utilizarão parâmetros explícitos e próprios de cada série; **não serão aplicados durante o Bloco A**. Os produtos brutos permanecem imutáveis.
+
+
+## 5. Triagem estatistica JRC/COINr e teto de intervencoes (novembro de 2026)
+
+O diagnostico utiliza as definicoes de **assimetria corrigida** e **curtose
+excedente corrigida** do COINr (equivalentes a `e1071::skewness(type=2)`
+e `e1071::kurtosis(type=2)`). As formulas sao implementadas com R base,
+sem exigir instalacao do pacote COINr.
+
+A regra de verificacao de `check_SkewKurt()` e:
+
+```text
+PASSA se |assimetria| < 2 OU curtose excedente < 3.5
+INVESTIGAR caso contrario (ambos os limites atingidos)
+```
+
+Quando nao ha dispersao ou ha menos de quatro valores validos, a triagem
+e **INDETERMINADA**. Um sinal `INVESTIGAR` nao obriga a winsorizar;
+valores extremos podem refletir condicoes reais e exigem avaliacao tecnica.
+A magnitude e o sinal da assimetria nao definem sozinhos o regime de
+winsorizacao a aplicar.
+
+**Regra propria do PRAIS_BRASIL:** ate **5% das observacoes validas de cada
+serie indicador × grupo**, com 2000 + 2010 + 2022 reunidos. Sao
+previstos quatro regimes para eventual avaliacao: nenhum; bilateral
+ate 2,5% em cada cauda; unilateral inferior ate 5%; unilateral superior
+ate 5%. O arredondamento dos tetos e sempre para baixo (`floor()`), nao
+se devendo ultrapassar o teto por causa de empates em valores limites.
+
+Exemplo para uma serie com 16.642 observacoes validas: teto conjunto de
+832; modalidade bilateral de ate 416 inferiores e 416 superiores; ou
+ate 832 em uma unica cauda. O percentual aplica-se exclusivamente aos
+dados **validos da propria serie**, nao a outros indicadores, grupos ou
+aos anos separadamente.
+
+### Informacoes incorporadas ao diagnostico
+
+O arquivo `02_estatisticas_conjuntas.csv` passa a incluir as colunas
+`assimetria_coinr_type2`, `curtose_excesso_coinr_type2`,
+`triagem_coinr`, `investigar_winsorizacao`, indicacao
+descritiva da cauda por sinal de assimetria e os tetos de 5% e 2,5%.
+O campo legado `assimetria_momento` permanece para nao quebrar a
+interface anterior; ele **nao** e o estimador corrigido tipo 2.
+
+O arquivo novo `06_orcamentos_winsorizacao.csv` registra quatro regimes
+por serie, seus tetos e a triagem. **Nao contem valores winsorizados,
+percentis de corte aprovados nem decisao automatica sobre qual regime
+utilizar.** Os resultados anuais sao apenas descritivos: nao possuem
+flag operacional nem tetos especificos por ano.
+
+### O que permanece fora deste codigo
+
+Ainda nao existe rotina que altere os valores ou selecione automaticamente
+os pontos a winsorizar. Uma futura implementacao devera contabilizar
+**observacoes efetivamente modificadas**, resolver empates sem ultrapassar
+o teto, registrar variacoes por ano e preservar os dados originais.
+
+A implementacao do COINr e iterativa e opera por extremos sucessivos.
+**Nossa politica de teto percentual e especifica do PRAIS_BRASIL;**
+o parametro padrao `winmax=5` do COINr significa **cinco observacoes**,
+nao 5% da serie.
+
+Fontes de referencia:
+- [COINr: codigo-fonte de `skew()`, `kurt()`, `check_SkewKurt()` e `winsorise()`](https://github.com/bluefoxr/COINr/blob/master/R/treat.R)
+- [COINr: `check_SkewKurt()`](https://search.r-project.org/CRAN/refmans/COINr/help/check_SkewKurt.html)
+- [COINr: `winsorise()`](https://search.r-project.org/CRAN/refmans/COINr/html/winsorise.html)
+

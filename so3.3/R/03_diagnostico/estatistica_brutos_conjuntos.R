@@ -161,6 +161,97 @@ estat_so33_quantil <- function(x, p) {
                              na.rm = TRUE, type = 7L))
 }
 
+
+# ============================================================
+# Triagem JRC/COINr - momentos corrigidos (e1071 type = 2)
+#
+# As duas formulas seguem COINr::skew() e COINr::kurt().
+# Curtose e excedente (normal = 0).
+# check_SkewKurt: PASSA quando |assimetria| < 2 OU curtose < 3.5;
+# caso contrario, INVESTIGAR (ambos os limites atingidos).
+# NA/constante/N insuficiente => INDETERMINADO, sem decisao automatica.
+# Nao executa winsorizacao.
+# Fonte: https://github.com/bluefoxr/COINr/blob/master/R/treat.R
+# ============================================================
+
+estat_so33_momentos_coinr <- function(
+    x, limite_assimetria = 2, limite_curtose = 3.5) {
+  estat_so33_exigir(is.numeric(x), "Valores para momentos devem ser numericos.")
+  estat_so33_exigir(all(is.finite(x[!is.na(x)])),
+                    "Momentos COINr nao aceitam infinitos.")
+  estat_so33_exigir(is.numeric(limite_assimetria) &&
+                      length(limite_assimetria) == 1L &&
+                      is.finite(limite_assimetria) && limite_assimetria > 0,
+                    "Limite de assimetria invalido.")
+  estat_so33_exigir(is.numeric(limite_curtose) &&
+                      length(limite_curtose) == 1L &&
+                      is.finite(limite_curtose),
+                    "Limite de curtose invalido.")
+  x <- x[!is.na(x)]
+  n <- length(x)
+
+  indefinido <- function(motivo) {
+    list(assimetria = NA_real_, curtose_excesso = NA_real_,
+         status = motivo, investigar = NA, cauda_assimetria = NA_character_)
+  }
+  if (n < 4L) return(indefinido("INDETERMINADO_N_INSUFICIENTE"))
+
+  z <- x - mean(x)
+  s2 <- sum(z^2)
+  if (!is.finite(s2) || s2 <= 0) {
+    return(indefinido("INDETERMINADO_DISPERSAO_ZERO"))
+  }
+
+  # Formula e1071 type = 2 utilizada pelo COINr (skew/kurt).
+  assimetria <- sqrt(n) * sum(z^3) / (s2^(3/2))
+  assimetria <- assimetria * sqrt(n * (n - 1)) / (n - 2)
+  r <- n * sum(z^4) / (s2^2)
+  curtose <- ((n + 1) * (r - 3) + 6) * (n - 1) / ((n - 2) * (n - 3))
+  if (!is.finite(assimetria) || !is.finite(curtose)) {
+    return(indefinido("INDETERMINADO_MOMENTOS_NAO_FINITOS"))
+  }
+
+  passa <- abs(assimetria) < limite_assimetria ||
+           curtose < limite_curtose
+  list(
+    assimetria = as.numeric(assimetria),
+    curtose_excesso = as.numeric(curtose),
+    status = if (passa) "PASSA" else "INVESTIGAR",
+    investigar = !passa,
+    cauda_assimetria = if (assimetria > 0) "superior" else
+      if (assimetria < 0) "inferior" else "sem_predominio"
+  )
+}
+
+# Tetos de POSSIVEIS intervencoes sobre observacoes validas, NAO
+# limites percentilicos, parametros estimados ou tratamento.
+# Empates podem demandar regras adicionais para nao exceder o teto.
+estat_so33_orcamentos_winsor <- function(n_validos, proporcao_max = 0.05) {
+  estat_so33_exigir(
+    is.numeric(n_validos) && length(n_validos) == 1L &&
+      is.finite(n_validos) && n_validos >= 0 &&
+      n_validos == floor(n_validos),
+    "Numero de observacoes validas invalido."
+  )
+  estat_so33_exigir(
+    is.numeric(proporcao_max) && length(proporcao_max) == 1L &&
+      is.finite(proporcao_max) &&
+      proporcao_max >= 0 && proporcao_max <= 0.05,
+    "O teto por serie nao pode superar 5%."
+  )
+  n_max <- as.integer(floor(n_validos * proporcao_max))
+  n_metade <- as.integer(floor(n_validos * proporcao_max / 2))
+  data.frame(
+    regime = c("sem_winsorizacao", "bilateral_2p5_2p5",
+               "unilateral_inferior_5", "unilateral_superior_5"),
+    limite_percentual_total = rep(100 * proporcao_max, 4L),
+    max_modificacoes_inferior = c(0L, n_metade, n_max, 0L),
+    max_modificacoes_superior = c(0L, n_metade, 0L, n_max),
+    max_modificacoes_total = c(0L, 2L * n_metade, n_max, n_max),
+    stringsAsFactors = FALSE
+  )
+}
+
 estat_so33_resumir <- function(
     base, dimensao, indicador, grupo_referencia,
     escopo = "conjunto_2000_2010_2022", ano_descritivo = NA_integer_) {
@@ -172,6 +263,11 @@ estat_so33_resumir <- function(
   n <- length(x)
   media <- if (n) mean(x) else NA_real_
   desvio <- if (n > 1L) stats::sd(x) else NA_real_
+  momentos_coinr <- estat_so33_momentos_coinr(observado)
+  conjunto_tres_anos <- identical(escopo, "conjunto_2000_2010_2022")
+  teto_conjunto <- if (conjunto_tres_anos) {
+    estat_so33_orcamentos_winsor(n)
+  } else NULL
   assimetria <- if (n > 2L && is.finite(desvio) && desvio > 0) {
     mean(((x - media) / desvio)^3)
   } else {
@@ -199,7 +295,24 @@ estat_so33_resumir <- function(
     coeficiente_variacao = if (n > 1L && media != 0) {
       desvio / abs(media)
     } else NA_real_,
-    assimetria_momento = assimetria, iqr = iqr,
+    assimetria_momento = assimetria,
+    assimetria_coinr_type2 = momentos_coinr$assimetria,
+    curtose_excesso_coinr_type2 = momentos_coinr$curtose_excesso,
+    triagem_coinr = if (conjunto_tres_anos) momentos_coinr$status
+                   else "APENAS_DESCRITIVO_ANUAL",
+    investigar_winsorizacao = if (conjunto_tres_anos) {
+      momentos_coinr$investigar
+    } else NA,
+    cauda_por_assimetria_apenas_diagnostico = if (conjunto_tres_anos) {
+      momentos_coinr$cauda_assimetria
+    } else NA_character_,
+    teto_modificacoes_5pct = if (conjunto_tres_anos) {
+      teto_conjunto$max_modificacoes_total[[3L]]
+    } else NA_integer_,
+    teto_por_cauda_bilateral_2p5pct = if (conjunto_tres_anos) {
+      teto_conjunto$max_modificacoes_superior[[2L]]
+    } else NA_integer_,
+    iqr = iqr,
     min = q[["min"]], p01 = q[["p01"]], p025 = q[["p025"]],
     p05 = q[["p05"]], p25 = q[["p25"]], mediana = q[["p50"]],
     p75 = q[["p75"]], p95 = q[["p95"]], p975 = q[["p975"]],
@@ -278,6 +391,26 @@ estat_so33_diagnosticar <- function(
   rownames(descricao_anual) <- NULL
   rownames(registros_extremos) <- NULL
 
+  orcamentos <- do.call(rbind, lapply(seq_len(nrow(conjunto)), function(i) {
+    x <- conjunto[i, , drop = FALSE]
+    tabela <- estat_so33_orcamentos_winsor(x$n_validos)
+    cbind(
+      data.frame(
+        dimensao = x$dimensao, indicador = x$indicador,
+        grupo_referencia = x$grupo_referencia,
+        n_validos = x$n_validos,
+        triagem_coinr = x$triagem_coinr,
+        assimetria_coinr_type2 = x$assimetria_coinr_type2,
+        curtose_excesso_coinr_type2 = x$curtose_excesso_coinr_type2,
+        cauda_por_assimetria_apenas_diagnostico =
+          x$cauda_por_assimetria_apenas_diagnostico,
+        stringsAsFactors = FALSE
+      ),
+      tabela
+    )
+  }))
+  rownames(orcamentos) <- NULL
+
   n_series <- if (meta$natureza == "populacional") 3L else 1L
   estat_so33_exigir(nrow(conjunto) == n_series &&
                       nrow(descricao_anual) == n_series * length(anos),
@@ -309,7 +442,8 @@ estat_so33_diagnosticar <- function(
     estatisticas_conjuntas = conjunto,
     estatisticas_anuais_descritivas = descricao_anual,
     extremos_para_inspecao = registros_extremos,
-    status_inf02 = status
+    status_inf02 = status,
+    orcamentos_winsorizacao = orcamentos
   )
 
   if (!is.null(dir_saida)) {
@@ -329,6 +463,8 @@ estat_so33_diagnosticar <- function(
       estat_so33_gravar_csv(status,
                            file.path(dir_saida, "05_status_INF02.csv"))
     }
+    estat_so33_gravar_csv(orcamentos,
+                         file.path(dir_saida, "06_orcamentos_winsorizacao.csv"))
     manifest <- c(
       "PRAIS4/SO3.3 - Diagnostico estatistico; SEM tratamento.",
       paste("Indicador:", indicador),
@@ -339,6 +475,11 @@ estat_so33_diagnosticar <- function(
       "Parametros determinados por indicador/grupo; este diagnostico nao define nenhum.",
       "Estatisticas anuais sao descritivas e nao fornecem limiares anuais.",
       "Cercas de Tukey nao sao limites aprovados para winsorizacao.",
+      "COINr: assimetria e curtose excedente e1071 type=2; triagem: |skew|>=2 E kurt>=3.5.",
+      "Sinal COINr de investigacao NAO e autorizacao de tratamento.",
+      "Orcamento por serie conjunta: ate 5% de registros validos; 2.5% por cauda ou 5% unilateral.",
+      "Regimes sao apenas tetos; nenhuma observacao foi modificada.",
+      "Empates e revisao das observacoes deverao ser contemplados na futura implementacao.",
       "NA nao foi imputado; nenhum CSV bruto foi alterado.",
       paste("R:", R.version.string),
       paste("Data UTC:", format(Sys.time(), tz = "UTC", usetz = TRUE))
