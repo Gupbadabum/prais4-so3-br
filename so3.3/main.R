@@ -332,6 +332,21 @@ if (DIMENSAO_ATIVA == "infraestrutural") {
          "Promova os produtos da E03 antes de executar main.R.")
   }
 
+  # Validar integralmente INF02 antes de acionar o processador INF01,
+  # que pode promover arquivos novos se ainda nao estiverem presentes.
+  ARQ_PROCESSADOR_INF02 <- "so3.3/R/04_execucao/processar_inf02.R"
+  if (!file.exists(ARQ_PROCESSADOR_INF02)) {
+    stop("INF02: processador nao encontrado: ", ARQ_PROCESSADOR_INF02)
+  }
+  source(ARQ_PROCESSADOR_INF02)
+  resultado_inf02 <- processar_inf02(ano = ANO_ATIVO)
+  if (!is.list(resultado_inf02) ||
+      !isTRUE(resultado_inf02$integral) ||
+      !identical(resultado_inf02$status,
+                 "bruto_reutilizado_validado_com_ressalva")) {
+    stop("INF02/", ANO_ATIVO, ": integracao incompleta.")
+  }
+
   if (FORCAR_RECALCULO) {
     stop(
       "INF01: FORCAR_RECALCULO=TRUE nao e permitido no main.R. ",
@@ -394,26 +409,12 @@ if (DIMENSAO_ATIVA == "infraestrutural") {
 
   resultado_inf01 <- resultado_execucao
 
-  ARQ_PROCESSADOR_INF02 <- "so3.3/R/04_execucao/processar_inf02.R"
-  if (!file.exists(ARQ_PROCESSADOR_INF02)) {
-    stop("INF02: processador nao encontrado: ", ARQ_PROCESSADOR_INF02)
-  }
-  source(ARQ_PROCESSADOR_INF02)
-  resultado_inf02 <- processar_inf02(ano = ANO_ATIVO)
-
-  if (!is.list(resultado_inf02) ||
-      !isTRUE(resultado_inf02$integral) ||
-      !identical(resultado_inf02$status,
-                 "bruto_reutilizado_validado_com_ressalva")) {
-    stop("INF02/", ANO_ATIVO, ": integracao incompleta.")
-  }
-
   resultado_execucao <- list(
     dimensao = "infraestrutural",
     ano = ANO_ATIVO,
     integral = TRUE,
     indicadores = list(INF01 = resultado_inf01, INF02 = resultado_inf02),
-    ressalva = "INF02_CALCULADO_COM_RESSALVA_NAO_HARMONIZADO"
+    ressalva = "INF02_CALCULADO_SEM_HARMONIZACAO_TERRITORIAL"
   )
   resultado_exportacao <- list(
     INF01 = resultado_inf01$arquivo_bruto_csv,
