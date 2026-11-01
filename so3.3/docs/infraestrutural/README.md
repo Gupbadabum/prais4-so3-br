@@ -2,10 +2,10 @@
 
 **PRAIS_BRASIL | Documentação conceitual, metodológica e operacional dos indicadores municipais**  
 **Referência do projeto:** *Performance Review and Assessment of Implementation System* (PRAIS), Objetivo Estratégico 3 (SO3), produto SO3.3.  
-**Estado do documento:** proposta para revisão técnica — outubro de 2026.  
+**Estado do documento:** INF01 consolidado; INF02 integrado e validado operacionalmente em 2000, 2010 e 2022; documentação metodológica final da dimensão pendente — novembro de 2026.  
 **Localização proposta:** `so3.3/docs/infraestrutural/README.md`.
 
-> **Delimitação.** Este documento descreve a dimensão Infraestrutural e a construção dos seus indicadores **brutos**. O `INF01_REDE_CANALIZADA` foi concluído e integrado ao `main.R` para 2000, 2010 e 2022. O `INF02`, relativo aos recursos hídricos renováveis per capita, possui desenvolvimento independente e ainda não é apresentado aqui como produto concluído. Tratamento estatístico, normalização, ponderação e composição do DVI são etapas posteriores. A presença de infraestrutura de água, isoladamente, **não é medida de segurança hídrica nem de vulnerabilidade à seca**.
+> **Delimitação.** Este documento descreve a dimensão Infraestrutural e a construção dos seus indicadores **brutos**. O `INF01_REDE_CANALIZADA` foi concluído e integrado ao `main.R` para 2000, 2010 e 2022. O `INF02`, relativo aos recursos hídricos renováveis per capita, possui produção bruta E01–E03 e integração operacional validadas para os três anos. Seus valores refletem uma referência territorial de 2025 **não harmonizada** com os recortes censitários; a documentação metodológica final ainda está em consolidação. Tratamento estatístico, normalização, ponderação e composição do DVI são etapas posteriores. A presença de infraestrutura de água, isoladamente, **não é medida de segurança hídrica nem de vulnerabilidade à seca**.
 
 ## 1. Apresentação da dimensão
 
@@ -18,7 +18,7 @@ A escala de produção dos indicadores é **municipal**, com recortes de referê
 | Código | Indicador | Unidade | Natureza | Situação |
 |---|---|---|---|---|
 | `INF01_REDE_CANALIZADA` | População residente em DPP com abastecimento principal pela rede geral e água canalizada internamente | % | Condição domiciliar atribuída à população residente; Total, Masculino e Feminino | **Concluído**: 2000, 2010 e 2022; produção bruta e integração ao `main.R` aprovadas |
-| `INF02` | Recursos hídricos renováveis per capita | A documentar com a especificação definitiva | Atributo territorial associado à disponibilidade hídrica | Desenvolvimento metodológico e computacional independente; não concluído neste documento |
+| `INF02_RECURSOS_HIDRICOS_PC` | Recursos hídricos renováveis per capita | m³/habitante/ano | Atributo territorial compartilhado entre Total, Masculino e Feminino, com ressalva de não harmonização territorial | Produção bruta E01–E03 e integração operacional aprovadas nos três anos; documentação final pendente |
 
 A dimensão não corresponde à soma simples desses dois indicadores. Direção, transformações, normalização e agregação serão tratadas no fluxo de composição do DVI.
 
@@ -162,7 +162,7 @@ Os nomes municipais são associados a uma referência do IBGE de 2025 para ident
 
 O INF01 bruto mede **acesso**: valores elevados indicam maior cobertura pelo critério operacional. Sua contribuição à vulnerabilidade tem **orientação inversa** e será tratada somente no fluxo posterior de orientação e normalização do DVI. O processamento bruto **não** aplica winsorização, Box-Cox, pesos dimensionais ou classes de vulnerabilidade.
 
-A integração com o INF02 e a construção da dimensão Infraestrutural deverão ocorrer somente após a conclusão e validação próprias desse segundo indicador e da definição comum de tratamento e agregação.
+A integração computacional do INF01 com o INF02 está validada para os três recortes temporais. A aprovação da **documentação final da dimensão Infraestrutural** permanece como requisito anterior a qualquer tratamento estatístico, orientação, normalização ou agregação do DVI.
 
 ## 7. Rastreabilidade e referências
 
@@ -178,9 +178,9 @@ A integração com o INF02 e a construção da dimensão Infraestrutural deverã
 | INF01 — validação computacional nacional | **Aprovada** |
 | INF01 — produção bruta e integração ao `main.R` | **Aprovadas** |
 | INF01 — comparação externa | Diferenciada por ano; ressalva registrada para 2022 |
-| INF02 — recursos hídricos renováveis per capita | **Desenvolvimento independente, ainda não encerrado aqui** |
+| INF02 — recursos hídricos renováveis per capita | **Produção E01–E03 e integração operacional validadas; documentação final pendente** |
 | Tratamento, normalização e agregação da dimensão | **Etapas posteriores** |
 
 ---
 
-*Proposta documental para revisão. Não constitui publicação automática nem substitui as condições de uso dos dados de origem.*
+*Documento operacional em atualização. A documentação metodológica final ainda requer aprovação e não substitui as condições de uso dos dados de origem.*

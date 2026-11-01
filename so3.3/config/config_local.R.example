@@ -1,0 +1,17 @@
+# PRAIS4 / SO3.3 - exemplo de caminhos locais (NAO versionar config_local.R)
+#
+# Copie este arquivo para so3.3/config/config_local.R e ajuste os caminhos
+# somente na sua maquina. O arquivo real esta ignorado pelo Git.
+#
+# Etapa E01 do INF02: pasta contendo spatial/, intermediate/ e diagnostics/
+DIR_INF02_PREPARACAO <- "/CAMINHO/LOCAL/INFO2"
+#
+# Malha municipal IBGE 2025 (arquivo .shp junto dos demais componentes)
+ARQ_INF02_MUNICIPIOS_2025_SHP <- "/CAMINHO/LOCAL/BR_Municipios_2025.shp"
+#
+# Alternativa sem config_local.R:
+# Rscript so3.3/executar_inf02_etapa01.R "/CAMINHO/LOCAL/INFO2" \
+#   "/CAMINHO/LOCAL/BR_Municipios_2025.shp" DF
+#
+# ATENCAO: NAO alterar caminhos dos insumos usados por checkpoints E01
+# aprovados sem planejar a mudanca de identidade e a revalidacao.
