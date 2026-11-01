@@ -1,6 +1,6 @@
 # SO3.3 — Inventário de versionamento da dimensão Infraestrutural
 
-**Estado:** inventário preliminar para auditoria, não aprovação final.  
+**Estado:** inventário histórico de pendências; os sete scripts INF02 foram versionados em `2e6a1a8` no PR #2; a dimensão permanece aberta até a documentação final.  
 **Data de referência:** 01/11/2026.  
 **Fontes do inventário:** árvore do GitHub (`main`, PR #2) e saída do `git status --short` local informada pelo executor.  
 **Limitação:** os arquivos locais ainda não versionados não foram lidos nem auditados; sua existência foi informada pelo executor. Este documento não atesta completude ou segurança dos conteúdos.
@@ -40,7 +40,7 @@ A validação isolada e integrada dos três recortes foi informada pelo executor
 
 ## 3. Componentes locais identificados, ainda não versionados
 
-### 3.1 INF02 — 7 arquivos de código (prioridade alta)
+### 3.1 INF02 — 7 arquivos de código (pendência resolvida no PR #2)
 
 1. `so3.3/R/01_leitura/ler_populacao_censitaria_inf02.R`
 2. `so3.3/R/04_execucao/processar_inf02_municipalizacao.R`
@@ -50,7 +50,7 @@ A validação isolada e integrada dos três recortes foi informada pelo executor
 6. `so3.3/executar_inf02_etapa02.R`
 7. `so3.3/executar_inf02_etapa03.R`
 
-**Auditoria necessária:** caminhos locais e externos, funções auxiliares, configuração, dependências, ordem de execução, salvaguardas contra sobrescrita, QA, status, tolerâncias, produtos previstos e restrições de publicação.
+**Atualização:** auditoria estática registrada em `AUDITORIA_ESTATICA_INF02_E01_E03.md` e sete scripts publicados no commit `2e6a1a8`. Permanecem pendentes apenas a documentação final e as ressalvas de proveniência/ambiente; não são necessárias novas revisões dos testes históricos INF01.
 
 ### 3.2 INF01/INF02 — 4 documentos locais (prioridade alta)
 
