@@ -57,6 +57,9 @@
   # devem compartilhar valor (inclusive NA) e metadados da E03.
   grupos_por_municipio <- x[, .(
     n = .N,
+    n_uf = data.table::uniqueN(uf, na.rm = FALSE),
+    n_nome = data.table::uniqueN(nm_mun, na.rm = FALSE),
+    n_indicador = data.table::uniqueN(indicador, na.rm = FALSE),
     n_valor = data.table::uniqueN(valor, na.rm = FALSE),
     n_status = data.table::uniqueN(status_calculo, na.rm = FALSE),
     n_unidade = data.table::uniqueN(unidade, na.rm = FALSE),
@@ -66,6 +69,9 @@
                                       na.rm = FALSE)
   ), by = cod_mun]
   if (any(grupos_por_municipio$n != 3L) ||
+      any(grupos_por_municipio$n_uf != 1L) ||
+      any(grupos_por_municipio$n_nome != 1L) ||
+      any(grupos_por_municipio$n_indicador != 1L) ||
       any(grupos_por_municipio$n_valor != 1L) ||
       any(grupos_por_municipio$n_status != 1L) ||
       any(grupos_por_municipio$n_unidade != 1L) ||
@@ -75,17 +81,30 @@
     stop("INF02/", ano, ": divergencia entre grupos territoriais em ", origem)
   }
 
-  # Baseline aprovado na E03: NA nao e falha nem deve ser imputado.
+  # Contrato efetivamente publicado pela E03. Valores NA representam
+  # situacoes documentadas, nunca falhas a serem imputadas automaticamente.
   n_disponiveis <- c("2000" = 5493L, "2010" = 5551L, "2022" = 5556L)
+  status_calculado <- "CALCULADO_SEM_HARMONIZACAO_TERRITORIAL"
+  status_na <- c(
+    "DIVISAO_TERRITORIAL_ALTERADA_2025",
+    "Q_NEGATIVA_NAO_INTERPRETAVEL",
+    "SEM_CONTRIBUICAO_ESTIMADA",
+    "SEM_POPULACAO_CENSITARIA"
+  )
   total <- x[grupo == "Total"]
+  estados <- unique(total$status_calculo)
+  if (!setequal(estados, c(status_calculado, status_na))) {
+    stop("INF02/", ano, ": conjunto de status da E03 diverge em ", origem,
+         ": ", paste(sort(estados), collapse = ", "))
+  }
   if (sum(!is.na(total$valor)) != n_disponiveis[[as.character(ano)]]) {
     stop("INF02/", ano, ": quantidade de valores disponiveis diverge da E03.")
   }
-  if (any(
-    total$status_calculo[!is.na(total$valor)] !=
-      "CALCULADO_COM_RESSALVA_NAO_HARMONIZADO"
-  )) {
-    stop("INF02/", ano, ": status dos valores calculados diverge da E03.")
+  if (any(!is.na(total$valor) & total$status_calculo != status_calculado) ||
+      any(is.na(total$valor) & !total$status_calculo %in% status_na)) {
+    stop("INF02/", ano,
+         ": inconsistencia entre status_calculo e presenca de valor em ",
+         origem, ".")
   }
 
   data.table::setorderv(x, c("cod_mun", "grupo"))
@@ -161,7 +180,8 @@ processar_inf02 <- function(ano, dir_bruto = DIR_OUTPUT_BRUTO) {
     n_registros_grupo = nrow(rds),
     n_disponiveis = sum(!is.na(total$valor)),
     n_ausentes = sum(is.na(total$valor)),
-    status_valores_calculados = "CALCULADO_COM_RESSALVA_NAO_HARMONIZADO",
+    registros_por_status = as.list(table(total$status_calculo)),
+    status_valores_calculados = "CALCULADO_SEM_HARMONIZACAO_TERRITORIAL",
     sem_harmonizacao_territorial = TRUE,
     verificacao = "Integridade e consistencia CSV/RDS da E03; nao e validacao hidrologica",
     md5 = as.list(tools::md5sum(c(arq_rds, arq_csv)))
