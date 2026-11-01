@@ -1,0 +1,10 @@
+dimensao;indicador;sentido;justificativa
+social;SOC01_ALF15;inverso;Maior alfabetizacao representa menor vulnerabilidade
+social;SOC02_RURAL;direto;Maior proporcao rural representa maior vulnerabilidade no modelo adotado
+social;SOC03_EV0;inverso;Maior expectativa de vida representa menor vulnerabilidade
+social;SOC04_POP1564;inverso;Maior proporcao em idade ativa representa menor vulnerabilidade
+economica;ECO01_POV3_PPC21;direto;Maior pobreza representa maior vulnerabilidade
+economica;ECO02_PIBPC;inverso;Maior PIB per capita representa menor vulnerabilidade
+economica;ECO03_AGROPIB;direto;Maior participacao agropecuaria no PIB representa maior vulnerabilidade
+infraestrutural;INF01_REDE_CANALIZADA;inverso;Maior acesso a rede e canalizacao representa menor vulnerabilidade
+infraestrutural;INF02_RECURSOS_HIDRICOS_PC;inverso;Maior disponibilidade hidrica per capita representa menor vulnerabilidade
