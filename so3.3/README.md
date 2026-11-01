@@ -148,3 +148,18 @@ Exemplo de chamada:
 Para 2010, o Censo é mantido como Arrow Dataset e apenas uma UF é materializada por vez. Após o cálculo dos resultados municipais, os microdados da UF são removidos da memória.
 
 Os resultados são gravados em checkpoints sob outputs/bruto/<dimensao>/<ano>/ e outputs/intermediario/<dimensao>/<ano>/. O tratamento estatístico temporal continua separado: winsorização e Box-Cox só devem ser avaliadas depois que 2000, 2010 e 2022 estiverem reduzidos a bases municipais.
+
+## Diagnóstico estatístico público (Bloco A)
+
+O diagnóstico dos indicadores brutos é executado **após** a produção municipal, sem modificar o `main.R` nem os CSVs de origem. O código é reutilizável nas três dimensões, mas os parâmetros estatísticos pertencem exclusivamente a cada **indicador × grupo populacional** (anos 2000/2010/2022 reunidos). Indicadores territoriais compartilhados são avaliados uma única vez, sem replicação artificial.
+
+Documentação e instruções: [`docs/estatistica/README.md`](docs/estatistica/README.md).
+
+Primeira execução (SOC01, dimensão Social):
+
+```bash
+Rscript so3.3/tests/testar_estatistica_brutos.R
+Rscript so3.3/executar_diagnostico_estatistico.R social SOC01_ALF15
+```
+
+Esta etapa apenas caracteriza distribuições; não aplica winsorização, Box–Cox, normalização, orientação ou composição do DVI.
