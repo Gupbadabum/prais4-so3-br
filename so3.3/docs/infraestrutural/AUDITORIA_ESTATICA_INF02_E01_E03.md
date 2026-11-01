@@ -80,3 +80,19 @@ Esta auditoria é **estática**; os scripts não foram executados aqui porque o 
 4. Produzir manifesto dos insumos E01/SIDRA e do ambiente, sem armazenar dados restritos no GitHub.
 5. Revisar e incorporar documentação INF01/INF02, scripts históricos de validação e evidências; atualizar `docs/infraestrutural/README.md` para refletir a E03 concluída.
 6. Verificar reprodutibilidade permitida e encerrar a dimensão formalmente. **Tratamento estatístico permanece bloqueado.**
+
+## 6. Inventário MD5 dos sete scripts enviados (antes do versionamento)
+
+Estes checksums foram calculados a partir do pacote fornecido pelo executor em 01/11/2026. Seis arquivos devem conservar exatamente o mesmo conteúdo; somente o executor E01 é sanitizado para remover os caminhos absolutos do computador.
+
+| Arquivo (relativo a so3.3/) | MD5 original | MD5 proposto na branch |
+| --- | --- | --- |
+| `R/01_leitura/ler_populacao_censitaria_inf02.R` | `1c8b42a9cc36bd99881c39575c5f99d7` | mesmo |
+| `R/04_execucao/processar_inf02_municipalizacao.R` | `7b30e82e3e1d810468cc94c6040094cd` | **inalterado (identidade E01)** |
+| `R/04_execucao/processar_inf02_etapa02.R` | `0d19c64c499c5827a5e33d7f4e1811ad` | mesmo |
+| `R/04_execucao/processar_inf02_etapa03.R` | `fdb3cbcf4a8219992c98963afc6ceac5` | mesmo |
+| `executar_inf02_etapa01.R` | `0d34b1a1f364deb74d5249a9aeb3dc10` | `ef550a1d2b3a8b8ee6038e126243bdaa` |
+| `executar_inf02_etapa02.R` | `158508c8df2f2d4f24f72ca8a5fad0f3` | mesmo |
+| `executar_inf02_etapa03.R` | `9b1c92915cd42554a522564a5e36cdf9` | mesmo |
+
+O procedimento de publicação usa um **worktree separado**, `git add` de exatamente sete caminhos e verifica o diff antes de autorizar commit/push. Não foi efetuado push desses scripts nesta auditoria; permanecem locais até que o executor execute o procedimento de publicação. O exemplo de `config_local.R` foi adicionado separadamente ao PR como documentação de configuração portátil.
