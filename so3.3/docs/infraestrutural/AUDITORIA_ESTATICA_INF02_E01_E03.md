@@ -2,7 +2,7 @@
 
 **Projeto:** PRAIS4 / SO3.3 / Dimensão Infraestrutural  
 **Data:** 2026-11-01  
-**Estado:** auditoria preliminar para versionamento; **não substitui a documentação metodológica final**.  
+**Estado:** auditoria estática concluída; sete scripts incorporados ao PR #2 no commit `2e6a1a8`; **não substitui a documentação metodológica final**.  
 **Escopo:** sete arquivos R fornecidos em `INF02_codigos_revisao.tar.gz`. Análise de conteúdo e fluxo; sem executar R ou acessar os insumos geoespaciais neste ambiente. O executor já informou validação isolada e integrada do indicador para 2000, 2010 e 2022 em sua máquina.
 
 ## 1. Cadeia operacional confirmada
@@ -95,4 +95,4 @@ Estes checksums foram calculados a partir do pacote fornecido pelo executor em 0
 | `executar_inf02_etapa02.R` | `158508c8df2f2d4f24f72ca8a5fad0f3` | mesmo |
 | `executar_inf02_etapa03.R` | `9b1c92915cd42554a522564a5e36cdf9` | mesmo |
 
-O procedimento de publicação usa um **worktree separado**, `git add` de exatamente sete caminhos e verifica o diff antes de autorizar commit/push. Não foi efetuado push desses scripts nesta auditoria; permanecem locais até que o executor execute o procedimento de publicação. O exemplo de `config_local.R` foi adicionado separadamente ao PR como documentação de configuração portátil.
+O procedimento de publicação usa um **worktree separado**, `git add` de exatamente sete caminhos e verifica o diff antes de autorizar commit/push. **Atualização após o inventário:** os sete scripts foram incluídos no commit `2e6a1a8dc63bf54ca2a47449d4e0218efce62090` e publicados na branch do PR #2, sem alteração dos seis arquivos preservados. O exemplo de `config_local.R` foi adicionado separadamente ao PR como documentação de configuração portátil.
