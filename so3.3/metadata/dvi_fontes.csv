@@ -1,0 +1,10 @@
+"indice";"ano";"componente";"arquivo_entrada";"md5_entrada";"n_registros";"n_municipios";"n_sem_correspondencia";"n_fora_da_malha_base"
+"DVI_BRASIL";2000;"SOCIAL";"so3.3/outputs/componentes/social/2000/COMP_SOCIAL_2000.csv";"758b388b99b16bddb81d426ea36c25b4";16521;5507;0;0
+"DVI_BRASIL";2000;"ECONOMICA";"so3.3/outputs/componentes/economica/2000/COMP_ECONOMICA_2000.csv";"ce2e559b86ef78273d79c703de876e0f";16521;5507;0;0
+"DVI_BRASIL";2000;"INFRAESTRUTURAL";"so3.3/outputs/componentes/infraestrutural/2000/COMP_INFRAESTRUTURAL_2000.csv";"51668852f4e77f878ace49e8f56dfada";16521;5507;0;0
+"DVI_BRASIL";2010;"SOCIAL";"so3.3/outputs/componentes/social/2010/COMP_SOCIAL_2010.csv";"f3c783c5a7b32f5a149a5e13e9286472";16695;5565;0;0
+"DVI_BRASIL";2010;"ECONOMICA";"so3.3/outputs/componentes/economica/2010/COMP_ECONOMICA_2010.csv";"6a295c17b7ffca53667961c6382e3585";16695;5565;0;0
+"DVI_BRASIL";2010;"INFRAESTRUTURAL";"so3.3/outputs/componentes/infraestrutural/2010/COMP_INFRAESTRUTURAL_2010.csv";"5c520214d77138c5ec01826e42d73c53";16695;5565;0;0
+"DVI_BRASIL";2022;"SOCIAL";"so3.3/outputs/componentes/social/2022/COMP_SOCIAL_2022.csv";"132e621136f1e0d3b676f8490038aadc";16710;5570;0;0
+"DVI_BRASIL";2022;"ECONOMICA";"so3.3/outputs/componentes/economica/2022/COMP_ECONOMICA_2022.csv";"510d4c6cb1fc4a987fbb764745d47932";16710;5570;0;0
+"DVI_BRASIL";2022;"INFRAESTRUTURAL";"so3.3/outputs/componentes/infraestrutural/2022/COMP_INFRAESTRUTURAL_2022.csv";"d6bc45e554aa0b850b5b6b5112bdfc33";16710;5570;0;0
