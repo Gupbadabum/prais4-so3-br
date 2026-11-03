@@ -103,6 +103,10 @@ A conclusão do primeiro bloco não implica que toda a série 2000–2023 ou tod
 
 ## Processamento
 
+O processamento no Google Earth Engine é organizado por quadriênio, mediante parametrização dos anos analíticos, permitindo reutilizar os procedimentos computacionais nos diferentes períodos. Os recortes populacionais Total, Feminino e Masculino são processados conjuntamente, preservando a independência de suas respectivas fontes e estimativas.
+
+A execução produz estatísticas anuais por classe de seca e grupo populacional, utilizadas na elaboração das tabelas SO3-2.T1, SO3-2.T2 e SO3-2.T3, além de um raster mestre quadrianual multibanda, que integra as informações de seca, população exposta e variáveis auxiliares de controle de qualidade. A agregação municipal derivada também contempla os três grupos populacionais, organizados em um único produto tabular.
+
 O fluxo utiliza principalmente:
 - Python;
 - Jupyter Notebook;
