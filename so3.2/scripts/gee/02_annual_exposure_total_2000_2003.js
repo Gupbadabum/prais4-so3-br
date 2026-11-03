@@ -1,17 +1,20 @@
-
 // ============================================================
 // PRAIS4 / SO3.2
 // ANNUAL POPULATION EXPOSURE TO DROUGHT
 // Period: 2000-2003
-// Population: TOTAL
+//
+// Population groups:
+//   - Total
+//   - Female
+//   - Male
 //
 // ALIGNED VERSION
 //
 // Exact WorldPop target grid:
 //   54172 x 46814 pixels
 //
-// This version corrects only the raster export geometry.
-// Previously validated T1 / QA results remain valid.
+// Total, Female and Male use the same exposure methodology.
+// Each population group remains an independent product.
 // ============================================================
 
 
@@ -34,13 +37,15 @@ var YEARS_EE = ee.List(
 // ------------------------------------------------------------
 // QA controls
 //
-// QA/T1 has already been validated.
-// Keep FALSE now to avoid unnecessary recalculation.
+// Annual Total QA has already been validated.
+//
+// Keep FALSE during production export to avoid unnecessary
+// recalculation of large rasters.
 // ------------------------------------------------------------
 
-var RUN_QA = false;
+var RUN_QA = true;
 
-var EXPORT_QA_CSV = false;
+var EXPORT_QA_CSV = true;
 
 
 // ------------------------------------------------------------
@@ -51,21 +56,39 @@ var DROUGHT_ASSET =
   'projects/cursoqueimadas-503722/assets/' +
   'drought_spei12_dec';
 
+
 var POP_TOTAL_ASSET =
   'projects/cursoqueimadas-503722/assets/' +
   'population_total';
 
 
+var POP_FEMALE_ASSET =
+  'projects/cursoqueimadas-503722/assets/' +
+  'population_female';
+
+
+var POP_MALE_ASSET =
+  'projects/cursoqueimadas-503722/assets/' +
+  'population_male';
+
+
 // ------------------------------------------------------------
-// Output collection
-//
-// Existing collection is maintained.
-// New corrected images receive suffix "_aligned".
+// Output collections
 // ------------------------------------------------------------
 
-var EXPOSURE_OUTPUT =
+var EXPOSURE_TOTAL_OUTPUT =
   'projects/cursoqueimadas-503722/assets/' +
   'exposure_total_annual';
+
+
+var EXPOSURE_FEMALE_OUTPUT =
+  'projects/cursoqueimadas-503722/assets/' +
+  'exposure_female_annual';
+
+
+var EXPOSURE_MALE_OUTPUT =
+  'projects/cursoqueimadas-503722/assets/' +
+  'exposure_male_annual';
 
 
 // ============================================================
@@ -114,6 +137,77 @@ var populationTotal =
   );
 
 
+var populationFemale =
+  ee.ImageCollection(
+    POP_FEMALE_ASSET
+  );
+
+
+var populationMale =
+  ee.ImageCollection(
+    POP_MALE_ASSET
+  );
+
+
+// ------------------------------------------------------------
+// Population-group configuration
+//
+// export:
+//   false = product already exists / do not recreate
+//   true  = create annual export tasks
+// ------------------------------------------------------------
+
+var POPULATION_GROUPS = [
+
+  {
+    sex:
+      'total',
+
+    collection:
+      populationTotal,
+
+    output:
+      EXPOSURE_TOTAL_OUTPUT,
+
+    export:
+      true
+  },
+
+  {
+    sex:
+      'female',
+
+    collection:
+      populationFemale,
+
+    output:
+      EXPOSURE_FEMALE_OUTPUT,
+
+    export:
+      true
+  },
+
+  {
+    sex:
+      'male',
+
+    collection:
+      populationMale,
+
+    output:
+      EXPOSURE_MALE_OUTPUT,
+
+    export:
+      true
+  }
+
+];
+
+
+// ============================================================
+// 3. BASIC INPUT CHECKS
+// ============================================================
+
 print(
   'Drought images 2000-2003:',
   drought
@@ -127,16 +221,25 @@ print(
 );
 
 
-print(
-  'Population images 2000-2003:',
-  populationTotal
-    .filter(
-      ee.Filter.inList(
-        'year',
-        YEARS_EE
-      )
-    )
-    .size()
+POPULATION_GROUPS.forEach(
+  function(group) {
+
+    print(
+      'Population ' +
+      group.sex +
+      ' images 2000-2003:',
+
+      group.collection
+        .filter(
+          ee.Filter.inList(
+            'year',
+            YEARS_EE
+          )
+        )
+        .size()
+    );
+
+  }
 );
 
 
@@ -153,7 +256,7 @@ print(
 
 
 // ============================================================
-// 3. SUPPORT FUNCTIONS
+// 4. SUPPORT FUNCTIONS
 // ============================================================
 
 function getDrought(year) {
@@ -217,7 +320,7 @@ function statOrZero(
 
 
 // ============================================================
-// 4. BUILD ANNUAL EXPOSURE
+// 5. BUILD ANNUAL EXPOSURE
 // ============================================================
 
 function buildAnnualExposure(
@@ -251,7 +354,8 @@ function buildAnnualExposure(
   // Drought NoData remains masked.
   //
   // Nearest-neighbour is the default Earth Engine
-  // reprojection method and is appropriate for classes.
+  // reprojection method and is appropriate for categorical
+  // drought classes.
   // ----------------------------------------------------------
 
   var exposedMask =
@@ -342,10 +446,7 @@ function buildAnnualExposure(
 
 
 // ============================================================
-// 5. OPTIONAL QA
-//
-// Already validated.
-// RUN_QA = false by default.
+// 6. OPTIONAL ANNUAL QA
 // ============================================================
 
 function annualStats(
@@ -657,26 +758,38 @@ function annualStats(
 
 
 // ============================================================
-// 6. OPTIONAL QA EXECUTION
+// 7. OPTIONAL QA EXECUTION
 // ============================================================
 
 if (RUN_QA) {
 
-  var annualQA =
-    ee.FeatureCollection(
+  var qaFeatures = [];
 
-      YEARS_EE.map(
+
+  POPULATION_GROUPS.forEach(
+    function(group) {
+
+      YEARS_JS.forEach(
         function(year) {
 
-          return annualStats(
-            year,
-            populationTotal,
-            'total'
+          qaFeatures.push(
+            annualStats(
+              year,
+              group.collection,
+              group.sex
+            )
           );
 
         }
-      )
+      );
 
+    }
+  );
+
+
+  var annualQA =
+    ee.FeatureCollection(
+      qaFeatures
     )
     .sort(
       'year'
@@ -697,13 +810,13 @@ if (RUN_QA) {
         annualQA,
 
       description:
-        'SO32_exposure_total_QA_2000_2003',
+        'SO32_exposure_QA_2000_2003',
 
       folder:
         'PRAIS4_SO3',
 
       fileNamePrefix:
-        'SO32_exposure_total_QA_2000_2003',
+        'SO32_exposure_QA_2000_2003',
 
       fileFormat:
         'CSV'
@@ -716,7 +829,7 @@ if (RUN_QA) {
 
 
 // ============================================================
-// 7. EXPORT ALIGNED ANNUAL RASTERS
+// 8. EXPORT ALIGNED ANNUAL RASTERS
 // ============================================================
 //
 // IMPORTANT:
@@ -725,73 +838,119 @@ if (RUN_QA) {
 //
 // Exact raster dimensions + CRS + affine transform define
 // the complete target grid.
+//
+// Current production configuration:
+//
+//   Total   = FALSE
+//   Female  = TRUE
+//   Male    = TRUE
+//
+// Therefore, expected Tasks = 8.
 // ============================================================
 
-YEARS_JS.forEach(
-  function(year) {
+POPULATION_GROUPS.forEach(
+  function(group) {
 
 
-    var product =
-      buildAnnualExposure(
-        year,
-        populationTotal,
-        'total'
+    if (!group.export) {
+
+      print(
+        'Export skipped:',
+        group.sex
       );
 
+      return;
+    }
 
-    Export.image.toAsset({
 
-      image:
-        product,
+    YEARS_JS.forEach(
+      function(year) {
 
-      description:
-        'SO32_exposure_total_' +
-        year +
-        '_aligned',
 
-      assetId:
-        EXPOSURE_OUTPUT +
-        '/exposure_total_' +
-        year +
-        '_aligned',
+        var product =
+          buildAnnualExposure(
+            year,
+            group.collection,
+            group.sex
+          );
 
-      dimensions:
-        POP_DIMENSIONS,
 
-      crs:
-        POP_CRS,
+        Export.image.toAsset({
 
-      crsTransform:
-        POP_TRANSFORM,
+          image:
+            product,
 
-      maxPixels:
-        1e13,
+          description:
+            'SO32_exposure_' +
+            group.sex +
+            '_' +
+            year +
+            '_aligned',
 
-      pyramidingPolicy: {
+          assetId:
+            group.output +
+            '/exposure_' +
+            group.sex +
+            '_' +
+            year +
+            '_aligned',
 
-        drought_class:
-          'mode',
+          dimensions:
+            POP_DIMENSIONS,
 
-        population_exposed:
-          'mean'
+          crs:
+            POP_CRS,
+
+          crsTransform:
+            POP_TRANSFORM,
+
+          maxPixels:
+            1e13,
+
+          pyramidingPolicy: {
+
+            drought_class:
+              'mode',
+
+            population_exposed:
+              'mean'
+
+          }
+
+        });
 
       }
-
-    });
+    );
 
   }
 );
 
 
 // ============================================================
-// 8. VISUAL CHECK - 2000
+// 9. VISUAL CHECK - 2000
 // ============================================================
 
-var annual2000 =
+var annualTotal2000 =
   buildAnnualExposure(
     2000,
     populationTotal,
     'total'
+  );
+
+
+var annualFemale2000 =
+  buildAnnualExposure(
+    2000,
+    populationFemale,
+    'female'
+  );
+
+
+var annualMale2000 =
+  buildAnnualExposure(
+    2000,
+    populationMale,
+    'male'
   );
 
 
@@ -806,7 +965,7 @@ Map.centerObject(
 
 Map.addLayer(
 
-  annual2000.select(
+  annualTotal2000.select(
     'drought_class'
   ),
 
@@ -824,7 +983,7 @@ Map.addLayer(
 
 Map.addLayer(
 
-  annual2000.select(
+  annualTotal2000.select(
     'population_exposed'
   ),
 
@@ -833,7 +992,43 @@ Map.addLayer(
     max: 100
   },
 
-  'Population exposed 2000',
+  'Population exposed TOTAL 2000',
+
+  false
+
+);
+
+
+Map.addLayer(
+
+  annualFemale2000.select(
+    'population_exposed'
+  ),
+
+  {
+    min: 0,
+    max: 50
+  },
+
+  'Population exposed FEMALE 2000',
+
+  false
+
+);
+
+
+Map.addLayer(
+
+  annualMale2000.select(
+    'population_exposed'
+  ),
+
+  {
+    min: 0,
+    max: 50
+  },
+
+  'Population exposed MALE 2000',
 
   false
 
@@ -853,12 +1048,32 @@ print(
 );
 
 print(
-  'Expected grid: 54172 x 46814'
+  'Expected grid:',
+  POP_DIMENSIONS
 );
 
 print(
   'QA recalculation:',
   RUN_QA
+);
+
+print(
+  'Total export:',
+  POPULATION_GROUPS[0].export
+);
+
+print(
+  'Female export:',
+  POPULATION_GROUPS[1].export
+);
+
+print(
+  'Male export:',
+  POPULATION_GROUPS[2].export
+);
+
+print(
+  'Expected current export tasks: 8'
 );
 
 print(

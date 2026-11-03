@@ -1,59 +1,203 @@
 // ============================================================
 // PRAIS4 / SO3.2
-// MUNICIPAL EXPOSURE
-// Period: 2000-2003
-// Population: TOTAL
+// MUNICIPAL EXPOSURE - IBGE 2025
+//
+// Cemaden-derived analytical product.
 //
 // Municipal reference:
 //   IBGE/MUNICIPIOS/V2025
 //
-// Purpose:
-//   Materialize the municipal exposure product.
+// Population groups:
+//   - Total
+//   - Female
+//   - Male
 //
-// IMPORTANT:
+// Methodological notes:
 //
-//   - PRAIS official map remains raster-based.
-//   - Municipal product is Cemaden-derived.
-//   - Municipal thematic map will be produced AFTER this
-//     FeatureCollection is materialized (Script 06).
+//   - Official PRAIS spatial products remain raster-based.
+//
+//   - This municipal product is a Cemaden-derived aggregation.
+//
+//   - Historical exposure rasters are aggregated to the
+//     current IBGE 2025 municipal mesh.
+//
+//   - Total is an independent population product.
+//
+//   - Female + Male is NOT used to construct Total.
+//
+//   - Population reference corresponds to the mean population
+//     across the year(s) tied for the worst drought class
+//     within the quadrennium.
+//
+//   - Drought classes exposed:
+//       1 = Extreme
+//       2 = Severe
+//       3 = Moderate
+//       4 = Weak
+//
+//   - Class 5 = Normal.
+//
+//   - Absence of drought coverage is NOT interpreted as:
+//       * normal drought;
+//       * zero exposure;
+//       * zero population.
+//
+//   - No annual exposure Asset is required.
+//
+//   - No raster is exported by this script.
+//
+// Main output:
+//
+//   One CSV in long format:
+//
+//     municipality x sex
+//
+// Expected rows:
+//
+//   5571 municipalities/equivalent units x 3 groups
+//   = 16713 records.
 // ============================================================
 
 
 // ============================================================
-// 0. CONFIGURATION
+// 0. PERIOD CONFIGURATION
 // ============================================================
 
-var YEARS = [
-  2000,
-  2001,
-  2002,
-  2003
+var YEARS_JS = [
+  2016,
+  2017,
+  2018,
+  2019
 ];
 
-var PERIOD = '2000-2003';
-var SEX = 'total';
 
-var PROJECT =
+// ------------------------------------------------------------
+// Require exactly four consecutive analytical years
+// ------------------------------------------------------------
+
+if (YEARS_JS.length !== 4) {
+  throw new Error(
+    'Expected exactly 4 analytical years. Received: ' +
+    YEARS_JS.length
+  );
+}
+
+
+for (var i = 1; i < YEARS_JS.length; i++) {
+
+  if (YEARS_JS[i] !== YEARS_JS[i - 1] + 1) {
+
+    throw new Error(
+      'Analytical years must be consecutive: ' +
+      YEARS_JS.join(', ')
+    );
+
+  }
+
+}
+
+
+// ------------------------------------------------------------
+// Period identifiers
+// ------------------------------------------------------------
+
+var YEAR_START =
+  Math.min.apply(
+    null,
+    YEARS_JS
+  );
+
+
+var YEAR_END =
+  Math.max.apply(
+    null,
+    YEARS_JS
+  );
+
+
+var PERIOD =
+  YEAR_START +
+  '-' +
+  YEAR_END;
+
+
+var PERIOD_ID =
+  YEAR_START +
+  '_' +
+  YEAR_END;
+
+
+var YEARS_EE =
+  ee.List(
+    YEARS_JS
+  );
+
+
+// ============================================================
+// 1. EXPORT CONTROLS
+// ============================================================
+
+// Main permanent output.
+var EXPORT_MUNICIPAL_CSV =
+  true;
+
+
+// Optional Earth Engine FeatureCollection Asset.
+//
+// Disabled by default because the permanent municipal
+// deliverable is the CSV.
+var EXPORT_MUNICIPAL_ASSET =
+  true;
+
+
+// ============================================================
+// 2. ASSETS AND OUTPUT NAMES
+// ============================================================
+
+var ASSET_ROOT =
   'projects/cursoqueimadas-503722/assets/';
 
 
 // ------------------------------------------------------------
-// Exact aligned inputs
+// Drought
 // ------------------------------------------------------------
 
-var ANNUAL_EXPOSURE_BASE =
-  PROJECT + 'exposure_total_annual/';
+var DROUGHT_ASSET =
+  ASSET_ROOT +
+  'drought_spei12_dec';
 
-var POPULATION_BASE =
-  PROJECT + 'population_total/';
+
+// ------------------------------------------------------------
+// Population
+// ------------------------------------------------------------
+
+var POP_TOTAL_ASSET =
+  ASSET_ROOT +
+  'population_total';
+
+
+var POP_FEMALE_ASSET =
+  ASSET_ROOT +
+  'population_female';
+
+
+var POP_MALE_ASSET =
+  ASSET_ROOT +
+  'population_male';
+
+
+// ------------------------------------------------------------
+// Validated integrated quadrennial master
+// ------------------------------------------------------------
 
 var QUAD_ASSET =
-  PROJECT +
-  'exposure_total_quadrennial_2000_2003_aligned';
+  ASSET_ROOT +
+  'SO32_exposure_quadrennial_' +
+  PERIOD_ID;
 
 
 // ------------------------------------------------------------
-// Municipal mesh
+// Municipal reference mesh
 // ------------------------------------------------------------
 
 var MUNICIPAL_ASSET =
@@ -64,17 +208,28 @@ var MUNICIPAL_ASSET =
 // Output
 // ------------------------------------------------------------
 
+var MUNICIPAL_OUTPUT_NAME =
+  'SO32_municipal_exposure_' +
+  PERIOD_ID +
+  '_ibge2025';
+
+
 var MUNICIPAL_OUTPUT_ASSET =
-  PROJECT +
-  'municipal_exposure_total_2000_2003_ibge2025';
+  ASSET_ROOT +
+  MUNICIPAL_OUTPUT_NAME;
+
+
+var OUTPUT_FOLDER =
+  'PRAIS4_SO3';
 
 
 // ============================================================
-// 1. WORLDPOP GRID
+// 3. EXACT WORLDPOP GRID
 // ============================================================
 
 var POP_CRS =
   'EPSG:4326';
+
 
 var POP_TRANSFORM = [
    0.0008333333300044304,
@@ -87,60 +242,32 @@ var POP_TRANSFORM = [
 
 
 // ============================================================
-// 2. EXACT ANNUAL ALIGNED DROUGHT PRODUCTS
+// 4. INPUT COLLECTIONS
 // ============================================================
 
-var droughtAligned = {};
-
-YEARS.forEach(
-  function(year) {
-
-    droughtAligned[year] =
-      ee.Image(
-        ANNUAL_EXPOSURE_BASE +
-        'exposure_total_' +
-        year +
-        '_aligned'
-      )
-      .select(
-        'drought_class'
-      )
-      .rename(
-        'drought_class'
-      )
-      .toByte();
-
-  }
-);
+var drought =
+  ee.ImageCollection(
+    DROUGHT_ASSET
+  );
 
 
-// ============================================================
-// 3. EXACT ANNUAL POPULATION PRODUCTS
-// ============================================================
-
-var populationAnnual = {};
-
-YEARS.forEach(
-  function(year) {
-
-    populationAnnual[year] =
-      ee.Image(
-        POPULATION_BASE +
-        'population_total_' +
-        year
-      )
-      .select(0)
-      .rename(
-        'population'
-      );
-
-  }
-);
+var populationTotal =
+  ee.ImageCollection(
+    POP_TOTAL_ASSET
+  );
 
 
-// ============================================================
-// 4. QUADRENNIAL ALIGNED PRODUCT
-// ============================================================
+var populationFemale =
+  ee.ImageCollection(
+    POP_FEMALE_ASSET
+  );
+
+
+var populationMale =
+  ee.ImageCollection(
+    POP_MALE_ASSET
+  );
+
 
 var quad =
   ee.Image(
@@ -148,326 +275,141 @@ var quad =
   );
 
 
-var worstDrought =
-  quad
-    .select(
-      'worst_drought_class'
-    )
-    .rename(
-      'worst_drought_class'
-    );
+// ============================================================
+// 5. POPULATION GROUP CONFIGURATION
+// ============================================================
 
+var POPULATION_GROUPS = [
 
-var populationExposed =
-  quad
-    .select(
-      'population_exposed'
-    )
-    .rename(
-      'population_exposed'
-    );
+  {
+    sex:
+      'total',
+
+    collection:
+      populationTotal
+  },
+
+  {
+    sex:
+      'female',
+
+    collection:
+      populationFemale
+  },
+
+  {
+    sex:
+      'male',
+
+    collection:
+      populationMale
+  }
+
+];
 
 
 // ============================================================
-// 5. IBGE MUNICIPAL MESH 2025
+// 6. SUPPORT FUNCTIONS
 // ============================================================
 
-var municipalUnitsAll =
-  ee.FeatureCollection(
-    MUNICIPAL_ASSET
-  );
+function getDrought(year) {
 
+  return ee.Image(
 
-// ------------------------------------------------------------
-// Operational water-body codes:
-//
-//   4300001 = Lagoa Mirim
-//   4300002 = Lagoa dos Patos
-//
-// Exclusion by CODE is intentional.
-// Do not exclude by NM_MUN.
-// ------------------------------------------------------------
-
-var waterUnits =
-  municipalUnitsAll
-
-    .filter(
-      ee.Filter.inList(
-        'CD_MUN',
-        [
-          '4300001',
-          '4300002'
-        ]
-      )
-    );
-
-
-var municipalities =
-  municipalUnitsAll
-
-    .filter(
-      ee.Filter.neq(
-        'CD_MUN',
-        '4300001'
-      )
-    )
-
-    .filter(
-      ee.Filter.neq(
-        'CD_MUN',
-        '4300002'
-      )
-    );
-
-
-// ============================================================
-// 6. LIGHTWEIGHT INPUT QA
-// ============================================================
-
-print(
-  '========================================'
-);
-
-print(
-  '05 - MUNICIPAL EXPOSURE'
-);
-
-print(
-  '========================================'
-);
-
-
-print(
-  'IBGE 2025 - all units:',
-  municipalUnitsAll.size()
-);
-
-
-print(
-  'Operational water units:',
-  waterUnits.size()
-);
-
-
-print(
-  'Water unit codes:',
-  waterUnits.aggregate_array(
-    'CD_MUN'
-  )
-);
-
-
-print(
-  'Water unit names:',
-  waterUnits.aggregate_array(
-    'NM_MUN'
-  )
-);
-
-
-print(
-  'Municipal/equivalent units retained:',
-  municipalities.size()
-);
-
-
-print(
-  'Expected retained units:',
-  5571
-);
-
-
-print(
-  'Boa Esperanca do Norte:',
-  municipalities
-    .filter(
-      ee.Filter.eq(
-        'NM_MUN',
-        'Boa Esperança do Norte'
-      )
-    )
-    .size()
-);
-
-
-print(
-  'Quadrennial bands:',
-  quad.bandNames()
-);
-
-
-// ============================================================
-// 7. RECONSTRUCT CRITICAL-YEAR POPULATION
-// ============================================================
-//
-// Same rule as Script 03:
-//
-//   worst drought class during 2000-2003
-//   +
-//   population from year(s) reaching that class
-//
-// If tied:
-//   mean population across critical years.
-// ============================================================
-
-var criticalPopulationImages =
-  YEARS.map(
-    function(year) {
-
-
-      var droughtYear =
-        droughtAligned[year];
-
-
-      var populationYear =
-        populationAnnual[year];
-
-
-      var critical =
-        droughtYear.eq(
-          worstDrought
-        );
-
-
-      return populationYear
-
-        .updateMask(
-          critical
-        )
-
-        .rename(
-          'critical_population'
-        )
-
-        .set(
+    drought
+      .filter(
+        ee.Filter.eq(
           'year',
           year
-        );
+        )
+      )
+      .first()
 
-    }
+  )
+  .select(0)
+  .rename(
+    'drought_class'
+  )
+  .toByte();
+
+}
+
+
+// ------------------------------------------------------------
+// Population is selected by ANALYTICAL YEAR.
+//
+// For 2021-2023:
+//
+//   analytical year = 2021 / 2022 / 2023
+//   source_year     = 2020
+// ------------------------------------------------------------
+
+function getPopulation(
+  populationCollection,
+  year
+) {
+
+  year =
+    ee.Number(
+      year
+    );
+
+
+  var sourceYear =
+    year
+      .min(2020)
+      .toInt();
+
+
+  return ee.Image(
+
+    populationCollection
+      .filter(
+        ee.Filter.eq(
+          'year',
+          sourceYear
+        )
+      )
+      .first()
+
+  )
+  .select(0)
+  .rename(
+    'population'
+  )
+  .set(
+    'year',
+    year
+  )
+  .set(
+    'source_year',
+    sourceYear
   );
 
-
-var criticalPopulationCollection =
-  ee.ImageCollection.fromImages(
-    criticalPopulationImages
-  );
+}
 
 
-var populationReference =
-  criticalPopulationCollection
+// ------------------------------------------------------------
+// Expected WorldPop provenance
+// ------------------------------------------------------------
 
-    .mean()
+function expectedPopulationSourceYear(year) {
 
-    .rename(
-      'population_reference'
-    );
+  return year <= 2020
+    ? year
+    : 2020;
 
-
-// ============================================================
-// 8. POPULATION BY DROUGHT CLASS
-// ============================================================
-
-var class1 =
-  populationReference
-
-    .updateMask(
-      worstDrought.eq(1)
-    )
-
-    .rename(
-      'population_class_1'
-    );
+}
 
 
-var class2 =
-  populationReference
-
-    .updateMask(
-      worstDrought.eq(2)
-    )
-
-    .rename(
-      'population_class_2'
-    );
-
-
-var class3 =
-  populationReference
-
-    .updateMask(
-      worstDrought.eq(3)
-    )
-
-    .rename(
-      'population_class_3'
-    );
-
-
-var class4 =
-  populationReference
-
-    .updateMask(
-      worstDrought.eq(4)
-    )
-
-    .rename(
-      'population_class_4'
-    );
-
-
-var class5 =
-  populationReference
-
-    .updateMask(
-      worstDrought.eq(5)
-    )
-
-    .rename(
-      'population_class_5'
-    );
-
-
-// ============================================================
-// 9. MUNICIPAL REDUCTION STACK
-// ============================================================
+// ------------------------------------------------------------
+// Null-safe numeric property from reduceRegions()
 //
-// unmask(0) is used only for zonal sums.
+// Zero is used only as an intermediate computational value.
 //
-// Earth Engine retains the original image footprint by
-// default when unmask() is used.
-// ============================================================
-
-var municipalStack =
-  ee.Image.cat([
-
-    populationReference
-      .unmask(0),
-
-    populationExposed
-      .unmask(0),
-
-    class1
-      .unmask(0),
-
-    class2
-      .unmask(0),
-
-    class3
-      .unmask(0),
-
-    class4
-      .unmask(0),
-
-    class5
-      .unmask(0)
-
-  ]);
-
-
-// ============================================================
-// 10. SUPPORT FUNCTION
-// ============================================================
+// Final analytical semantics distinguish valid zero from
+// absence of drought coverage using hazard_support.
+// ------------------------------------------------------------
 
 function featureNumberOrZero(
   feature,
@@ -501,118 +443,778 @@ function featureNumberOrZero(
 
 
 // ============================================================
-// 11. ADD MUNICIPAL INDICATORS
+// 7. LIGHT INPUT QA
+// ============================================================
+
+print(
+  '========================================'
+);
+
+
+print(
+  '05 - MUNICIPAL EXPOSURE - IBGE 2025'
+);
+
+
+print(
+  'Period:',
+  PERIOD
+);
+
+
+print(
+  'Quadrennial master:',
+  QUAD_ASSET
+);
+
+
+print(
+  'Output:',
+  MUNICIPAL_OUTPUT_NAME
+);
+
+
+print(
+  '========================================'
+);
+
+
+// ------------------------------------------------------------
+// Quadrennial master
+// ------------------------------------------------------------
+
+print(
+  'Quadrennial master bands:',
+  quad.bandNames()
+);
+
+
+// ------------------------------------------------------------
+// Drought
+// ------------------------------------------------------------
+
+var droughtPeriodInput =
+  drought.filter(
+    ee.Filter.inList(
+      'year',
+      YEARS_EE
+    )
+  );
+
+
+print(
+  'Drought images expected:',
+  YEARS_JS.length
+);
+
+
+print(
+  'Drought images found:',
+  droughtPeriodInput.size()
+);
+
+
+print(
+  'Drought analytical years:',
+  droughtPeriodInput
+    .aggregate_array(
+      'year'
+    )
+    .sort()
+);
+
+
+// ------------------------------------------------------------
+// Population
+// ------------------------------------------------------------
+
+POPULATION_GROUPS.forEach(
+  function(group) {
+
+    var subset =
+      group.collection.filter(
+        ee.Filter.inList(
+          'year',
+          YEARS_EE
+        )
+      );
+
+
+    print(
+      'Population ' +
+      group.sex +
+      ' images found:',
+
+      subset.size()
+    );
+
+
+    print(
+      'Population ' +
+      group.sex +
+      ' analytical years:',
+
+      subset
+        .aggregate_array(
+          'year'
+        )
+        .sort()
+    );
+
+
+    print(
+      'Population ' +
+      group.sex +
+      ' source years:',
+
+      subset
+        .aggregate_array(
+          'source_year'
+        )
+        .sort()
+    );
+
+  }
+);
+
+
+var EXPECTED_SOURCE_YEARS =
+  YEARS_JS.map(
+    function(year) {
+
+      return expectedPopulationSourceYear(
+        year
+      );
+
+    }
+  );
+
+
+print(
+  'Expected population source years:',
+  EXPECTED_SOURCE_YEARS
+);
+
+
+// ============================================================
+// 8. QUADRENNIAL DROUGHT AND SUPPORT
+// ============================================================
+
+var worstDrought =
+  quad.select(
+    'worst_drought_class'
+  );
+
+
+// ------------------------------------------------------------
+// Drought spatial support
+//
+// 1 = valid worst-drought information
+// 0 = no valid drought information
+//
+// Used to distinguish:
+//
+//   valid zero
+//
+// from
+//
+//   absence of drought coverage.
+// ------------------------------------------------------------
+
+var hazardSupport =
+  worstDrought
+    .mask()
+    .rename(
+      'hazard_support'
+    )
+    .unmask(0)
+    .toByte();
+
+
+// ============================================================
+// 9. IBGE MUNICIPAL MESH 2025
+// ============================================================
+
+var municipalUnitsAll =
+  ee.FeatureCollection(
+    MUNICIPAL_ASSET
+  );
+
+
+// ------------------------------------------------------------
+// Operational water-body units excluded from municipal output:
+//
+//   4300001 = Área Operacional "Lagoa Mirim"
+//   4300002 = Área Operacional "Lagoa dos Patos"
+// ------------------------------------------------------------
+
+var waterUnits =
+  municipalUnitsAll.filter(
+    ee.Filter.inList(
+      'CD_MUN',
+      [
+        '4300001',
+        '4300002'
+      ]
+    )
+  );
+
+
+var municipalities =
+  municipalUnitsAll
+
+    .filter(
+      ee.Filter.neq(
+        'CD_MUN',
+        '4300001'
+      )
+    )
+
+    .filter(
+      ee.Filter.neq(
+        'CD_MUN',
+        '4300002'
+      )
+    );
+
+
+// ------------------------------------------------------------
+// Municipal mesh QA
+// ------------------------------------------------------------
+
+print(
+  'IBGE 2025 - all spatial units:',
+  municipalUnitsAll.size()
+);
+
+
+print(
+  'Operational water units:',
+  waterUnits.size()
+);
+
+
+print(
+  'Water unit codes:',
+  waterUnits.aggregate_array(
+    'CD_MUN'
+  )
+);
+
+
+print(
+  'Municipal/equivalent units retained:',
+  municipalities.size()
+);
+
+
+print(
+  'Expected retained units:',
+  5571
+);
+
+
+print(
+  'Boa Esperança do Norte units:',
+  municipalities
+    .filter(
+      ee.Filter.eq(
+        'NM_MUN',
+        'Boa Esperança do Norte'
+      )
+    )
+    .size()
+);
+
+
+// ============================================================
+// 10. RECONSTRUCT QUADRENNIAL POPULATION REFERENCE
+// ============================================================
+//
+// Temporal rule:
+//
+//   1. Determine the worst valid drought class in the period.
+//
+//   2. For each analytical year, retain population where that
+//      year's drought class equals the worst class.
+//
+//   3. If several years tie for the worst drought class,
+//      calculate the mean population across those critical
+//      years.
+//
+// Reconstructed independently for:
+//
+//   - Total
+//   - Female
+//   - Male
+// ============================================================
+
+function buildPopulationReference(
+  populationCollection,
+  sex
+) {
+
+  var criticalPopulationCollection =
+    ee.ImageCollection.fromImages(
+
+      YEARS_EE.map(
+        function(year) {
+
+          var droughtYear =
+            getDrought(
+              year
+            );
+
+
+          var populationYear =
+            getPopulation(
+              populationCollection,
+              year
+            );
+
+
+          // worstDrought is intentionally the first operand.
+          //
+          // This keeps the comparison anchored to the
+          // WorldPop target grid used by the master product.
+          var critical =
+            worstDrought.eq(
+              droughtYear
+            );
+
+
+          return populationYear
+
+            .updateMask(
+              critical
+            )
+
+            .rename(
+              'critical_population'
+            );
+
+        }
+      )
+
+    );
+
+
+  return criticalPopulationCollection
+
+    .mean()
+
+    .rename(
+      'population_reference_' +
+      sex
+    );
+
+}
+
+
+// ------------------------------------------------------------
+// Independent population-reference surfaces
+// ------------------------------------------------------------
+
+var populationReferenceTotal =
+  buildPopulationReference(
+    populationTotal,
+    'total'
+  );
+
+
+var populationReferenceFemale =
+  buildPopulationReference(
+    populationFemale,
+    'female'
+  );
+
+
+var populationReferenceMale =
+  buildPopulationReference(
+    populationMale,
+    'male'
+  );
+
+
+// ============================================================
+// 11. BUILD MUNICIPAL BANDS FOR ONE POPULATION GROUP
+// ============================================================
+//
+// Seven bands per population group:
+//
+//   population_reference
+//   population_exposed
+//   population_class_1
+//   population_class_2
+//   population_class_3
+//   population_class_4
+//   population_class_5
+//
+// population_exposed is taken directly from the validated
+// quadrennial master.
+//
+// Class-specific population is reconstructed using the common
+// population-reference surface and worst drought class.
+// ============================================================
+
+function buildMunicipalBands(
+  populationReference,
+  sex
+) {
+
+  var populationExposed =
+    quad
+      .select(
+        'population_exposed_' +
+        sex
+      )
+      .rename(
+        'population_exposed_' +
+        sex
+      );
+
+
+  var class1 =
+    populationReference
+      .updateMask(
+        worstDrought.eq(1)
+      )
+      .rename(
+        'population_class_1_' +
+        sex
+      );
+
+
+  var class2 =
+    populationReference
+      .updateMask(
+        worstDrought.eq(2)
+      )
+      .rename(
+        'population_class_2_' +
+        sex
+      );
+
+
+  var class3 =
+    populationReference
+      .updateMask(
+        worstDrought.eq(3)
+      )
+      .rename(
+        'population_class_3_' +
+        sex
+      );
+
+
+  var class4 =
+    populationReference
+      .updateMask(
+        worstDrought.eq(4)
+      )
+      .rename(
+        'population_class_4_' +
+        sex
+      );
+
+
+  var class5 =
+    populationReference
+      .updateMask(
+        worstDrought.eq(5)
+      )
+      .rename(
+        'population_class_5_' +
+        sex
+      );
+
+
+  return ee.Image.cat([
+
+    populationReference,
+
+    populationExposed,
+
+    class1,
+    class2,
+    class3,
+    class4,
+    class5
+
+  ]);
+
+}
+
+
+// ============================================================
+// 12. INTEGRATED MUNICIPAL REDUCTION STACK
+// ============================================================
+//
+// 7 bands x 3 population groups
+// +
+// 1 drought-support band
+//
+// = 22 bands.
+//
+// unmask(0) is used ONLY for zonal reduction.
+//
+// Final analytical semantics are restored after reduction using
+// hazard_support.
+// ============================================================
+
+var municipalBandsTotal =
+  buildMunicipalBands(
+    populationReferenceTotal,
+    'total'
+  );
+
+
+var municipalBandsFemale =
+  buildMunicipalBands(
+    populationReferenceFemale,
+    'female'
+  );
+
+
+var municipalBandsMale =
+  buildMunicipalBands(
+    populationReferenceMale,
+    'male'
+  );
+
+
+var municipalStack =
+  ee.Image.cat([
+
+    municipalBandsTotal,
+
+    municipalBandsFemale,
+
+    municipalBandsMale,
+
+    hazardSupport
+
+  ])
+  .unmask(0);
+
+
+// ------------------------------------------------------------
+// Structural QA
+// ------------------------------------------------------------
+
+print(
+  'Municipal reduction bands:',
+  municipalStack.bandNames()
+);
+
+
+print(
+  'Expected municipal reduction bands:',
+  22
+);
+
+
+// ============================================================
+// 13. ADD MUNICIPAL INDICATORS FOR ONE POPULATION GROUP
+// ============================================================
+//
+// IMPORTANT:
+//
+// Preserve the original Feature produced by reduceRegions().
+//
+// New attributes are added with feature.set({...}).
 // ============================================================
 
 function addMunicipalIndicators(
-  feature
+  feature,
+  sex
 ) {
-
 
   var total =
     featureNumberOrZero(
       feature,
-      'population_reference'
+      'population_reference_' +
+      sex
     );
 
 
   var exposed =
     featureNumberOrZero(
       feature,
-      'population_exposed'
+      'population_exposed_' +
+      sex
     );
 
 
   var c1 =
     featureNumberOrZero(
       feature,
-      'population_class_1'
+      'population_class_1_' +
+      sex
     );
 
 
   var c2 =
     featureNumberOrZero(
       feature,
-      'population_class_2'
+      'population_class_2_' +
+      sex
     );
 
 
   var c3 =
     featureNumberOrZero(
       feature,
-      'population_class_3'
+      'population_class_3_' +
+      sex
     );
 
 
   var c4 =
     featureNumberOrZero(
       feature,
-      'population_class_4'
+      'population_class_4_' +
+      sex
     );
 
 
   var c5 =
     featureNumberOrZero(
       feature,
-      'population_class_5'
+      'population_class_5_' +
+      sex
     );
+
+
+  // ----------------------------------------------------------
+  // Drought support
+  //
+  // hazard_support is binary at pixel level and reduced by SUM.
+  //
+  // > 0 = at least one valid drought pixel
+  // = 0 = no valid drought coverage
+  // ----------------------------------------------------------
+
+  var hazardSupportValue =
+    featureNumberOrZero(
+      feature,
+      'hazard_support'
+    );
+
+
+  var hasHazardSupport =
+    hazardSupportValue.gt(0);
 
 
   var hasPopulation =
     total.gt(0);
 
 
+  var validPercentage =
+    hasHazardSupport
+      .and(
+        hasPopulation
+      );
+
+
+  // ----------------------------------------------------------
+  // Percentage helper
+  //
+  // No drought support or no positive denominator -> null.
+  // ----------------------------------------------------------
+
   function percentage(value) {
 
-    return ee.Number(
+    return ee.Algorithms.If(
 
-      ee.Algorithms.If(
+      validPercentage,
 
-        hasPopulation,
+      value
+        .divide(
+          total
+        )
+        .multiply(100),
 
-        value
-          .divide(total)
-          .multiply(100),
-
-        0
-
-      )
+      null
 
     );
 
   }
 
 
+  // ----------------------------------------------------------
+  // Analytical-value helper
+  //
+  // No drought coverage -> null.
+  // ----------------------------------------------------------
+
+  function valueOrNull(value) {
+
+    return ee.Algorithms.If(
+
+      hasHazardSupport,
+
+      value,
+
+      null
+
+    );
+
+  }
+
+
+  // ----------------------------------------------------------
+  // QA balances
+  // ----------------------------------------------------------
+
+  var classSum =
+    c1
+      .add(c2)
+      .add(c3)
+      .add(c4)
+      .add(c5);
+
+
+  var exposedClassSum =
+    c1
+      .add(c2)
+      .add(c3)
+      .add(c4);
+
+
   var classBalance =
     total.subtract(
-
-      c1
-        .add(c2)
-        .add(c3)
-        .add(c4)
-        .add(c5)
-
+      classSum
     );
 
 
   var exposureBalance =
     exposed.subtract(
-
-      c1
-        .add(c2)
-        .add(c3)
-        .add(c4)
-
+      exposedClassSum
     );
 
 
+  // ----------------------------------------------------------
+  // Preserve original reduceRegions Feature
+  // ----------------------------------------------------------
+
   return feature.set({
+
+    // --------------------------------------------------------
+    // Product metadata
+    // --------------------------------------------------------
 
     period:
       PERIOD,
 
+    year_start:
+      YEAR_START,
+
+    year_end:
+      YEAR_END,
+
     sex:
-      SEX,
+      sex,
 
     municipal_mesh:
       MUNICIPAL_ASSET,
@@ -632,33 +1234,79 @@ function addMunicipalIndicators(
     drought_classes_exposed:
       '1-4',
 
-    population_reference_positive:
+
+    // --------------------------------------------------------
+    // Analysis support
+    // --------------------------------------------------------
+
+    hazard_support_available:
       ee.Number(
         ee.Algorithms.If(
-          hasPopulation,
+          hasHazardSupport,
           1,
           0
         )
       ),
 
-
-    // --------------------------------------------------------
-    // Exposure
-    // --------------------------------------------------------
-
-    exposed_pct_reference:
-      percentage(
-        exposed
+    analysis_status:
+      ee.String(
+        ee.Algorithms.If(
+          hasHazardSupport,
+          'valid',
+          'no_drought_coverage'
+        )
       ),
 
 
     // --------------------------------------------------------
-    // Drought classes
+    // Population reference
     // --------------------------------------------------------
+
+    population_reference:
+      valueOrNull(
+        total
+      ),
+
+    population_reference_positive:
+      ee.Algorithms.If(
+
+        hasHazardSupport,
+
+        ee.Number(
+          ee.Algorithms.If(
+            hasPopulation,
+            1,
+            0
+          )
+        ),
+
+        null
+
+      ),
+
+
+    // --------------------------------------------------------
+    // Drought class 1 - Extreme
+    // --------------------------------------------------------
+
+    population_class_1:
+      valueOrNull(
+        c1
+      ),
 
     pct_class_1_extreme:
       percentage(
         c1
+      ),
+
+
+    // --------------------------------------------------------
+    // Drought class 2 - Severe
+    // --------------------------------------------------------
+
+    population_class_2:
+      valueOrNull(
+        c2
       ),
 
     pct_class_2_severe:
@@ -666,14 +1314,44 @@ function addMunicipalIndicators(
         c2
       ),
 
+
+    // --------------------------------------------------------
+    // Drought class 3 - Moderate
+    // --------------------------------------------------------
+
+    population_class_3:
+      valueOrNull(
+        c3
+      ),
+
     pct_class_3_moderate:
       percentage(
         c3
       ),
 
+
+    // --------------------------------------------------------
+    // Drought class 4 - Weak
+    // --------------------------------------------------------
+
+    population_class_4:
+      valueOrNull(
+        c4
+      ),
+
     pct_class_4_weak:
       percentage(
         c4
+      ),
+
+
+    // --------------------------------------------------------
+    // Drought class 5 - Normal
+    // --------------------------------------------------------
+
+    population_class_5:
+      valueOrNull(
+        c5
       ),
 
     pct_class_5_normal:
@@ -683,20 +1361,43 @@ function addMunicipalIndicators(
 
 
     // --------------------------------------------------------
+    // Exposure
+    // --------------------------------------------------------
+
+    population_exposed:
+      valueOrNull(
+        exposed
+      ),
+
+    exposed_pct_reference:
+      percentage(
+        exposed
+      ),
+
+
+    // --------------------------------------------------------
     // QA
     // --------------------------------------------------------
 
     class_balance:
-      classBalance,
+      valueOrNull(
+        classBalance
+      ),
 
     class_balance_abs:
-      classBalance.abs(),
+      valueOrNull(
+        classBalance.abs()
+      ),
 
     exposure_balance:
-      exposureBalance,
+      valueOrNull(
+        exposureBalance
+      ),
 
     exposure_balance_abs:
-      exposureBalance.abs()
+      valueOrNull(
+        exposureBalance.abs()
+      )
 
   });
 
@@ -704,81 +1405,13 @@ function addMunicipalIndicators(
 
 
 // ============================================================
-// 12. PILOT MUNICIPAL QA
-//
-// Evaluate only São Paulo interactively.
-//
-// This verifies the complete raster -> municipality chain
-// without forcing all 5,571 polygons through the Console.
+// 14. NATIONAL MUNICIPAL REDUCTION
 // ============================================================
-
-var pilotMunicipality =
-  municipalities.filter(
-    ee.Filter.eq(
-      'NM_MUN',
-      'São Paulo'
-    )
-  );
-
-
-var pilotRaw =
-  municipalStack.reduceRegions({
-
-    collection:
-      pilotMunicipality,
-
-    reducer:
-      ee.Reducer.sum(),
-
-    crs:
-      POP_CRS,
-
-    crsTransform:
-      POP_TRANSFORM,
-
-    tileScale:
-      4,
-
-    maxPixelsPerRegion:
-      1e9
-
-  });
-
-
-var pilotExposure =
-  pilotRaw.map(
-    addMunicipalIndicators
-  );
-
-
-print(
-  '========================================'
-);
-
-print(
-  'PILOT - SAO PAULO'
-);
-
-print(
-  '========================================'
-);
-
-
-print(
-  'Pilot municipal result:',
-  pilotExposure.first()
-);
-
-
-// ============================================================
-// 13. FULL MUNICIPAL PRODUCT
 //
-// IMPORTANT:
+// This object is intentionally not evaluated with print().
 //
-// This object is NOT printed interactively.
-//
-// The complete national computation will be performed as
-// a batch export.
+// The full national computation is executed through the export
+// Task rather than through the interactive Console.
 // ============================================================
 
 var municipalRaw =
@@ -805,37 +1438,68 @@ var municipalRaw =
   });
 
 
-var municipalExposure =
+// ============================================================
+// 15. CONVERT TO LONG FORMAT
+// ============================================================
+
+var municipalTotal =
   municipalRaw.map(
-    addMunicipalIndicators
+    function(feature) {
+
+      return addMunicipalIndicators(
+        feature,
+        'total'
+      );
+
+    }
   );
 
 
+var municipalFemale =
+  municipalRaw.map(
+    function(feature) {
+
+      return addMunicipalIndicators(
+        feature,
+        'female'
+      );
+
+    }
+  );
+
+
+var municipalMale =
+  municipalRaw.map(
+    function(feature) {
+
+      return addMunicipalIndicators(
+        feature,
+        'male'
+      );
+
+    }
+  );
+
+
+var municipalExposure =
+  municipalTotal
+    .merge(
+      municipalFemale
+    )
+    .merge(
+      municipalMale
+    );
+
+
 // ============================================================
-// 14. EXPORT FEATURECOLLECTION TO EE ASSET
-// ============================================================
-
-Export.table.toAsset({
-
-  collection:
-    municipalExposure,
-
-  description:
-    'SO32_municipal_exposure_total_2000_2003_ibge2025',
-
-  assetId:
-    MUNICIPAL_OUTPUT_ASSET
-
-});
-
-
-// ============================================================
-// 15. CSV FIELDS
+// 16. CSV FIELDS
 // ============================================================
 
 var CSV_FIELDS = [
 
+  // ----------------------------------------------------------
   // Territorial identification
+  // ----------------------------------------------------------
 
   'CD_MUN',
   'NM_MUN',
@@ -857,9 +1521,14 @@ var CSV_FIELDS = [
   'AREA_KM2',
 
 
+  // ----------------------------------------------------------
   // Product metadata
+  // ----------------------------------------------------------
 
   'period',
+  'year_start',
+  'year_end',
+
   'sex',
 
   'municipal_mesh',
@@ -874,49 +1543,73 @@ var CSV_FIELDS = [
   'drought_classes_exposed',
 
 
-  // Population
+  // ----------------------------------------------------------
+  // Analysis support
+  // ----------------------------------------------------------
+
+  'analysis_status',
+  'hazard_support_available',
+
+
+  // ----------------------------------------------------------
+  // Population reference
+  // ----------------------------------------------------------
 
   'population_reference',
   'population_reference_positive',
 
 
+  // ----------------------------------------------------------
   // Class 1
+  // ----------------------------------------------------------
 
   'population_class_1',
   'pct_class_1_extreme',
 
 
+  // ----------------------------------------------------------
   // Class 2
+  // ----------------------------------------------------------
 
   'population_class_2',
   'pct_class_2_severe',
 
 
+  // ----------------------------------------------------------
   // Class 3
+  // ----------------------------------------------------------
 
   'population_class_3',
   'pct_class_3_moderate',
 
 
+  // ----------------------------------------------------------
   // Class 4
+  // ----------------------------------------------------------
 
   'population_class_4',
   'pct_class_4_weak',
 
 
+  // ----------------------------------------------------------
   // Class 5
+  // ----------------------------------------------------------
 
   'population_class_5',
   'pct_class_5_normal',
 
 
+  // ----------------------------------------------------------
   // Exposure
+  // ----------------------------------------------------------
 
   'population_exposed',
   'exposed_pct_reference',
 
 
+  // ----------------------------------------------------------
   // QA
+  // ----------------------------------------------------------
 
   'class_balance',
   'class_balance_abs',
@@ -928,10 +1621,13 @@ var CSV_FIELDS = [
 
 
 // ============================================================
-// 16. CSV WITHOUT GEOMETRY
+// 17. CSV WITHOUT GEOMETRY
+// ============================================================
 //
-// FeatureCollection.select() can explicitly remove geometry.
-// No setGeometry() chain is needed.
+// Do not evaluate municipalCSV.size() interactively.
+//
+// Final row-count and consistency checks are performed on the
+// exported CSV.
 // ============================================================
 
 var municipalCSV =
@@ -947,128 +1643,154 @@ var municipalCSV =
 
 
 // ============================================================
-// 17. EXPORT CSV
+// 18. EXPORT CSV
 // ============================================================
 
-Export.table.toDrive({
+if (EXPORT_MUNICIPAL_CSV) {
 
-  collection:
-    municipalCSV,
+  Export.table.toDrive({
 
-  description:
-    'SO32_municipal_exposure_total_2000_2003_ibge2025',
+    collection:
+      municipalCSV,
 
-  folder:
-    'PRAIS4_SO3',
+    description:
+      MUNICIPAL_OUTPUT_NAME,
 
-  fileNamePrefix:
-    'SO32_municipal_exposure_total_2000_2003_ibge2025',
+    folder:
+      OUTPUT_FOLDER,
 
-  fileFormat:
-    'CSV'
+    fileNamePrefix:
+      MUNICIPAL_OUTPUT_NAME,
 
-});
+    fileFormat:
+      'CSV',
+
+    selectors:
+      CSV_FIELDS
+
+  });
+
+}
 
 
 // ============================================================
-// 18. MAP
+// 19. OPTIONAL FEATURECOLLECTION ASSET
+// ============================================================
+
+if (EXPORT_MUNICIPAL_ASSET) {
+
+  Export.table.toAsset({
+
+    collection:
+      municipalExposure,
+
+    description:
+      MUNICIPAL_OUTPUT_NAME,
+
+    assetId:
+      MUNICIPAL_OUTPUT_ASSET
+
+  });
+
+}
+
+
+// ============================================================
+// 20. OPERATIONAL SUMMARY
+// ============================================================
 //
-// For now display only:
-//   - quadrennial raster
-//   - official IBGE 2025 boundaries
-//
-// The municipal thematic map will be generated in Script 06
-// AFTER the municipal FeatureCollection is materialized.
+// These values are configuration-derived and do not force the
+// national reduceRegions() to execute in the Console.
 // ============================================================
 
-Map.setCenter(
-  -51.9253,
-  -14.235,
-  4
-);
+var EXPECTED_MUNICIPALITIES =
+  5571;
 
 
-Map.addLayer(
-
-  populationExposed,
-
-  {
-    min:
-      0,
-
-    max:
-      100
-  },
-
-  'Quadrennial exposed population - 2000-2003',
-
-  false
-
-);
+var EXPECTED_ROWS =
+  EXPECTED_MUNICIPALITIES *
+  POPULATION_GROUPS.length;
 
 
-// ------------------------------------------------------------
-// Efficient IBGE boundary visualization
-// ------------------------------------------------------------
+var EXPECTED_TASKS =
+  (EXPORT_MUNICIPAL_CSV ? 1 : 0) +
+  (EXPORT_MUNICIPAL_ASSET ? 1 : 0);
 
-var municipalBoundaries =
-  ui.Map.FeatureViewLayer(
-    'IBGE/MUNICIPIOS/V2025_FeatureView'
-  );
-
-
-municipalBoundaries.setVisParams({
-
-  color:
-    '666666',
-
-  fillColor:
-    '00000000',
-
-  width:
-    0.5
-
-});
-
-
-municipalBoundaries.setName(
-  'IBGE Municipal Mesh 2025'
-);
-
-
-Map.add(
-  municipalBoundaries
-);
-
-
-// ============================================================
-// END
-// ============================================================
 
 print(
   '========================================'
 );
 
-print(
-  'MUNICIPAL BATCH TASKS CREATED'
-);
 
 print(
-  'Expected output rows:',
-  5571
+  'MUNICIPAL PROCESSING CONFIGURATION'
 );
 
-print(
-  '1. EE FeatureCollection Asset'
-);
 
 print(
-  '2. CSV without geometry'
+  'Period:',
+  PERIOD
 );
 
+
 print(
-  'Municipal thematic map deferred to Script 06.'
+  'Municipal mesh:',
+  MUNICIPAL_ASSET
 );
+
+
+print(
+  'Expected municipalities/equivalent units:',
+  EXPECTED_MUNICIPALITIES
+);
+
+
+print(
+  'Population groups:',
+  POPULATION_GROUPS.length
+);
+
+
+print(
+  'Expected CSV rows:',
+  EXPECTED_ROWS
+);
+
+
+print(
+  'CSV fields:',
+  CSV_FIELDS.length
+);
+
+
+print(
+  'CSV output:',
+  MUNICIPAL_OUTPUT_NAME
+);
+
+
+print(
+  'CSV export:',
+  EXPORT_MUNICIPAL_CSV
+);
+
+
+print(
+  'FeatureCollection Asset export:',
+  EXPORT_MUNICIPAL_ASSET
+);
+
+
+print(
+  'Expected Tasks:',
+  EXPECTED_TASKS
+);
+
+
+print(
+  'No raster export is created by Script 05.'
+);
+
 
 print(
   '========================================'

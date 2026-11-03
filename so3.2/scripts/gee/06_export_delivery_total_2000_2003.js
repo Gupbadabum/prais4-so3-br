@@ -1,27 +1,140 @@
 // ============================================================
 // PRAIS4 / SO3.2
-// DELIVERY EXPORT
-// Period: 2000-2003
-// Population: TOTAL
+// EXPORT QUADRENNIAL MASTER RASTER
 //
-// Exports final aligned rasters to Google Drive.
+// Purpose:
+//
+//   Export the complete validated quadrennial SO3.2 master
+//   raster from Earth Engine to Google Drive.
+//
+// The exported raster contains all information required for
+// subsequent local derivation of:
+//
+//   - PRAIS total population-exposed raster;
+//   - drought-class technical raster;
+//   - female exposed-population raster;
+//   - male exposed-population raster;
+//   - QA products;
+//   - maps and other derived products.
+//
+// No analytical reconstruction is performed here.
+//
+// The validated Earth Engine Asset is the source of truth.
+//
 // ============================================================
 
 
 // ============================================================
-// 0. CONFIGURATION
+// 0. PERIOD CONFIGURATION
 // ============================================================
+
+var YEARS_JS = [
+  2016,
+  2017,
+  2018,
+  2019
+];
+
+
+// ------------------------------------------------------------
+// Require exactly four consecutive analytical years
+// ------------------------------------------------------------
+
+if (YEARS_JS.length !== 4) {
+
+  throw new Error(
+    'Expected exactly 4 analytical years. Received: ' +
+    YEARS_JS.length
+  );
+
+}
+
+
+for (
+  var i = 1;
+  i < YEARS_JS.length;
+  i++
+) {
+
+  if (
+    YEARS_JS[i] !==
+    YEARS_JS[i - 1] + 1
+  ) {
+
+    throw new Error(
+      'Analytical years must be consecutive: ' +
+      YEARS_JS.join(', ')
+    );
+
+  }
+
+}
+
+
+// ------------------------------------------------------------
+// Period identifiers
+// ------------------------------------------------------------
+
+var YEAR_START =
+  Math.min.apply(
+    null,
+    YEARS_JS
+  );
+
+
+var YEAR_END =
+  Math.max.apply(
+    null,
+    YEARS_JS
+  );
+
+
+var PERIOD =
+  YEAR_START +
+  '-' +
+  YEAR_END;
+
+
+var PERIOD_ID =
+  YEAR_START +
+  '_' +
+  YEAR_END;
+
+
+// ============================================================
+// 1. EXPORT CONTROL
+// ============================================================
+
+var EXPORT_MASTER =
+  true;
+
+
+// ============================================================
+// 2. ASSET AND OUTPUT
+// ============================================================
+
+var ASSET_ROOT =
+  'projects/cursoqueimadas-503722/assets/';
+
 
 var QUAD_ASSET =
-  'projects/cursoqueimadas-503722/assets/' +
-  'exposure_total_quadrennial_2000_2003_aligned';
+  ASSET_ROOT +
+  'SO32_exposure_quadrennial_' +
+  PERIOD_ID;
 
 
-// Earth Engine Export.image.toDrive uses a FOLDER NAME,
-// not a Google Drive folder ID.
-var EXPORT_FOLDER =
+var OUTPUT_NAME =
+  'SO32_exposure_quadrennial_' +
+  PERIOD_ID;
+
+
+var OUTPUT_FOLDER =
   'PRAIS4_SO3';
 
+
+// ============================================================
+// 3. EXACT WORLDPOP GRID
+// ============================================================
 
 var POP_CRS =
   'EPSG:4326';
@@ -37,12 +150,22 @@ var POP_TRANSFORM = [
 ];
 
 
+var POP_WIDTH =
+  54172;
+
+
+var POP_HEIGHT =
+  46814;
+
+
 var POP_DIMENSIONS =
-  '54172x46814';
+  POP_WIDTH +
+  'x' +
+  POP_HEIGHT;
 
 
 // ============================================================
-// 1. LOAD FINAL QUADRENNIAL ASSET
+// 4. LOAD VALIDATED MASTER
 // ============================================================
 
 var quad =
@@ -51,236 +174,332 @@ var quad =
   );
 
 
-var worstDrought =
-  quad
-    .select(
-      'worst_drought_class'
-    );
-
-
-var populationExposed =
-  quad
-    .select(
-      'population_exposed'
-    );
-
-var populationSupport =
-  quad
-    .select(
-      'critical_year_count'
-    )
-    .mask();
-
 // ============================================================
-// 2. FINAL DROUGHT-CLASS RASTER
-//
-// 1 = Extreme
-// 2 = Severe
-// 3 = Moderate
-// 4 = Weak
-// 5 = Normal
-// 0 = NoData
+// 5. EXPECTED MASTER STRUCTURE
 // ============================================================
 
-var droughtExport =
-  worstDrought
-    .unmask(0)
-    .toByte();
+var EXPECTED_BANDS = [
+
+  'worst_drought_class',
+
+  'hazard_valid_years',
+
+  'hazard_missing_flag',
+
+  'population_exposed_total',
+
+  'critical_year_count_total',
+
+  'population_exposed_female',
+
+  'critical_year_count_female',
+
+  'population_exposed_male',
+
+  'critical_year_count_male'
+
+];
 
 
 // ============================================================
-// 3. FINAL EXPOSED-POPULATION RASTER
-//
-// Exposure classes 1-4:
-//   population value
-//
-// Class 5 (Normal):
-//   0
-//
-// Missing drought:
-//   -9999
-//
-// This gives the delivery raster an explicit distinction
-// between valid non-exposure (= 0) and true NoData (= -9999).
-// ============================================================
-
-var droughtValid =
-  worstDrought.mask();
-
-
-var exposedValidGrid =
-  ee.Image
-    .constant(0)
-    .toFloat()
-
-    .where(
-      populationExposed.mask(),
-      populationExposed
-    )
-
-    .updateMask(
-      droughtValid
-    )
-
-    .updateMask(
-      populationSupport
-    );
-
-
-var exposedExport =
-  exposedValidGrid
-    .unmask(-9999)
-    .toFloat();
-
-
-// ============================================================
-// 4. CHECKS
+// 6. LIGHT STRUCTURAL QA
 // ============================================================
 
 print(
   '========================================'
 );
 
-print(
-  'SO3.2 DELIVERY EXPORT - 2000-2003'
-);
 
 print(
-  '========================================'
+  '06 - EXPORT QUADRENNIAL MASTER'
 );
 
 
 print(
-  'Source asset:',
-  quad
+  'Period:',
+  PERIOD
 );
 
 
 print(
-  'Source bands:',
+  'Source Asset:',
+  QUAD_ASSET
+);
+
+
+print(
+  'Master bands:',
   quad.bandNames()
 );
 
 
 print(
-  'Output dimensions:',
+  'Expected master bands:',
+  EXPECTED_BANDS
+);
+
+
+print(
+  'Expected band count:',
+  EXPECTED_BANDS.length
+);
+
+
+print(
+  'Grid dimensions:',
   POP_DIMENSIONS
 );
 
 
 print(
-  'Output transform:',
+  'Grid CRS:',
+  POP_CRS
+);
+
+
+print(
+  'Grid transform:',
   POP_TRANSFORM
 );
 
 
-// ============================================================
-// 5. EXPORT WORST DROUGHT CLASS
-// ============================================================
-
-Export.image.toDrive({
-
-  image:
-    droughtExport,
-
-  description:
-    'SO32_drought_class_2000_2003_total',
-
-  folder:
-    EXPORT_FOLDER,
-
-  fileNamePrefix:
-    'SO32_drought_class_2000_2003',
-
-  dimensions:
-    POP_DIMENSIONS,
-
-  crs:
-    POP_CRS,
-
-  crsTransform:
-    POP_TRANSFORM,
-
-  maxPixels:
-    1e13,
-
-  fileFormat:
-    'GeoTIFF',
-
-  formatOptions: {
-
-    cloudOptimized:
-      true,
-
-    noData:
-      0
-
-  }
-
-});
+print(
+  '========================================'
+);
 
 
 // ============================================================
-// 6. EXPORT EXPOSED POPULATION
+// 7. PREPARE MASTER FOR GEOTIFF EXPORT
+// ============================================================
+//
+// GeoTIFF requires compatible band data types.
+//
+// The master combines categorical/count bands and continuous
+// population bands.
+//
+// For a single multiband GeoTIFF, all nine bands are exported
+// as Float32.
+//
+// This does NOT alter the categorical/count values:
+// integers 0-5 are exactly representable in Float32.
+//
+// Common explicit NoData value:
+//
+//   -9999
+//
+// Band order is preserved exactly.
 // ============================================================
 
-Export.image.toDrive({
+var masterExport =
+  quad
 
-  image:
-    exposedExport,
+    .select(
+      EXPECTED_BANDS
+    )
 
-  description:
-    'SO32_population_exposed_total_2000_2003',
+    .toFloat()
 
-  folder:
-    EXPORT_FOLDER,
-
-  fileNamePrefix:
-    'SO32_population_exposed_total_2000_2003',
-
-  dimensions:
-    POP_DIMENSIONS,
-
-  crs:
-    POP_CRS,
-
-  crsTransform:
-    POP_TRANSFORM,
-
-  maxPixels:
-    1e13,
-
-  fileFormat:
-    'GeoTIFF',
-
-  formatOptions: {
-
-    cloudOptimized:
-      true,
-
-    noData:
+    .unmask(
       -9999
+    )
 
-  }
+    .set({
 
-});
+      product:
+        'SO3.2_quadrennial_master',
+
+      period:
+        PERIOD,
+
+      year_start:
+        YEAR_START,
+
+      year_end:
+        YEAR_END,
+
+      population_groups:
+        'total,female,male',
+
+      drought_classes_exposed:
+        '1-4',
+
+      drought_class_normal:
+        5,
+
+      nodata_value:
+        -9999,
+
+      grid_reference:
+        'WorldPop_100m',
+
+      source_asset:
+        QUAD_ASSET
+
+    });
 
 
 // ============================================================
-// END
+// 8. EXPORT COMPLETE MASTER
+// ============================================================
+//
+// IMPORTANT:
+//
+//   - No region.
+//
+//   - dimensions + CRS + affine transform define exactly the
+//     validated WorldPop grid.
+//
+//   - fileDimensions controls only how the GeoTIFF export is
+//     physically divided into files.
+//
+//   - It does NOT change the analytical grid.
+//
+// 8192 x 8192 keeps each part at a manageable size.
+//
+// After download, the pieces can be assembled locally with
+// GDAL without reprojection or resampling.
 // ============================================================
 
-print(
-  'Two final raster export tasks created.'
-);
+if (EXPORT_MASTER) {
+
+  Export.image.toDrive({
+
+    image:
+      masterExport,
+
+    description:
+      OUTPUT_NAME,
+
+    folder:
+      OUTPUT_FOLDER,
+
+    fileNamePrefix:
+      OUTPUT_NAME,
+
+    dimensions:
+      POP_DIMENSIONS,
+
+    crs:
+      POP_CRS,
+
+    crsTransform:
+      POP_TRANSFORM,
+
+    shardSize:
+      256,
+
+    fileDimensions:
+      8192,
+
+    maxPixels:
+      5e9,
+
+    fileFormat:
+      'GeoTIFF',
+
+    formatOptions: {
+
+      cloudOptimized:
+        false,
+
+      noData:
+        -9999
+
+    }
+
+  });
+
+}
+
+
+// ============================================================
+// 9. OPERATIONAL SUMMARY
+// ============================================================
+
+var EXPECTED_TASKS =
+  EXPORT_MASTER
+    ? 1
+    : 0;
+
 
 print(
-  '1. Worst drought class raster'
+  '========================================'
 );
 
+
 print(
-  '2. Exposed population raster'
+  'MASTER EXPORT CONFIGURATION'
 );
+
+
+print(
+  'Period:',
+  PERIOD
+);
+
+
+print(
+  'Output:',
+  OUTPUT_NAME
+);
+
+
+print(
+  'Bands:',
+  EXPECTED_BANDS.length
+);
+
+
+print(
+  'Output data type:',
+  'Float32'
+);
+
+
+print(
+  'NoData:',
+  -9999
+);
+
+
+print(
+  'Grid dimensions:',
+  POP_DIMENSIONS
+);
+
+
+print(
+  'GeoTIFF file dimensions:',
+  '8192x8192'
+);
+
+
+print(
+  'Export master:',
+  EXPORT_MASTER
+);
+
+
+print(
+  'Expected Tasks:',
+  EXPECTED_TASKS
+);
+
+
+print(
+  'No region is used.'
+);
+
+
+print(
+  'No reprojection or resampling is performed.'
+);
+
+
+print(
+  'Local processing will derive delivery products.'
+);
+
 
 print(
   '========================================'
