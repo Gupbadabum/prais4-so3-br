@@ -1,0 +1,15 @@
+# Dependencias diretas identificadas nos scripts de SO3.1 (inventario, nao lockfile).
+# Versoes exatas do ambiente de producao ainda nao foram registradas.
+# Ver REPRODUCIBILITY.md na raiz do repositorio.
+geopandas
+matplotlib
+numpy
+pandas
+pyproj
+rasterio
+shapely
+xarray
+
+# Backend NetCDF sugerido para xr.open_dataset() em arquivos .nc.
+# Confirmar compatibilidade com os NetCDFs originais antes de uma release.
+netCDF4
