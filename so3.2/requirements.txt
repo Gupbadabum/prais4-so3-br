@@ -1,0 +1,13 @@
+# Dependencias Python identificadas em SO3.2 (inventario, nao lockfile).
+# Inclui notebooks e o processamento local da populacao.
+# Google Colab (google.colab) e um servico/ambiente, nao um requisito pip local.
+# Scripts JavaScript de GEE rodam no Earth Engine Code Editor, sem Node.js.
+# Ver REPRODUCIBILITY.md na raiz do repositorio.
+earthengine-api
+matplotlib
+numpy
+pandas
+rasterio
+requests
+scipy
+urllib3
